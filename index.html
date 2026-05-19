@@ -73,6 +73,10 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 .badge-teacher    { background:#00b894; color:#fff; }
 .badge-membership { background:#00cec9; color:#fff; }
 .type-btn.active-membership { border-color:#00cec9; background:#00cec9; color:#fff; }
+.tax-btn { border-radius:20px; font-size:.78rem; padding:3px 12px; border:2px solid #dfe6e9; background:#fff; cursor:pointer; transition:.15s; }
+.tax-btn.active-tax { border-color:#00b894; background:#00b894; color:#fff; }
+.tax-btn.vat-active  { border-color:#e17055; background:#e17055; color:#fff; }
+.tax-btn.cash-active { border-color:#0984e3; background:#0984e3; color:#fff; }
 .actual-amt-box { background:#f0fff8; border:1px solid #b2f5e6; border-radius:10px; padding:6px 12px; font-size:.82rem; font-weight:700; color:#00b894; margin-top:4px; }
 .disc-line { text-decoration:line-through; color:#b2bec3; font-size:.78rem; font-weight:400; }
 
@@ -493,7 +497,12 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 
     <!-- 월별 방문 통계 -->
     <div class="mt-4">
-      <div class="section-title">선생님별 월 방문 현황</div>
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="section-title mb-0">지점·선생님별 방문 & 매출 현황</div>
+        <button class="btn btn-sm btn-outline-success" style="border-radius:20px;font-size:.78rem;" onclick="exportMonthlyVisitExcel()">
+          <i class="bi bi-file-earmark-excel me-1"></i>엑셀 출력
+        </button>
+      </div>
       <div id="monthlyVisitStats"></div>
     </div>
   </div>
@@ -688,9 +697,26 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
             <div class="col-4 d-flex align-items-end pb-1">
               <span style="font-size:.72rem;color:#00b894;font-weight:600;">회원권 인센티브 적용</span>
             </div>
-            <div class="col-12" id="txRegActualWrap" style="display:none;">
+            <!-- 결제 수단 -->
+            <div class="col-12">
+              <label class="form-label">결제 수단</label>
+              <select class="form-select form-select-sm" id="txRegPayment">
+                <option value="card">카드</option>
+                <option value="cash">현금</option>
+              </select>
+            </div>
+            <!-- 세금 탭 -->
+            <div class="col-12">
+              <label class="form-label">세금 / 영수증</label>
+              <div class="d-flex gap-1" id="txTaxGroup">
+                <button type="button" class="tax-btn active-tax" id="taxBtn_none"   onclick="setTxTax('none',this)">없음</button>
+                <button type="button" class="tax-btn"            id="taxBtn_vat"    onclick="setTxTax('vat',this)">부가세 +10%</button>
+                <button type="button" class="tax-btn"            id="taxBtn_cash"   onclick="setTxTax('cash',this)">현금영수증 +10%</button>
+              </div>
+            </div>
+            <div class="col-12">
               <div class="actual-amt-box d-flex justify-content-between align-items-center">
-                <span>💰 실등록금액</span><span id="txRegActualAmt"></span>
+                <span>💰 실등록금액</span><span id="txRegActualAmt" class="fw-bold">-</span>
               </div>
             </div>
           </div>
@@ -1285,10 +1311,23 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+// 거래가 삭제됐는데 남아있는 visitLog 정리
+// - txId가 있는데 해당 거래가 없으면 → 삭제 (autoAdded 여부 무관)
+function cleanOrphanVisitLogs() {
+  const txIds = new Set(db.transactions.map(t => t.id));
+  const before = db.visitLogs.length;
+  db.visitLogs = db.visitLogs.filter(v => {
+    if (!v.txId) return true;       // txId 없는 순수 수동 항목은 유지
+    return txIds.has(v.txId);       // txId가 있으면 거래가 존재해야 유지
+  });
+  if (db.visitLogs.length !== before) saveDB(db);
+}
+
 function renderAll() {
   if (!currentUser) return;
   if (!db.stores.length) db.stores.push({ id: uid(), name: '1호점' });
   currentStoreId = currentStoreId || db.stores[0].id;
+  cleanOrphanVisitLogs();
   populateStoreSelect();
   renderStatCards();
   renderTxTable();
@@ -1582,6 +1621,10 @@ function openTxModal(txId) {
     document.getElementById('txContract').checked    = tx.contractSigned;
     document.getElementById('txPrivacy').checked     = tx.privacyAgreed;
     document.getElementById('txNote').value          = tx.note||'';
+    // 유입경로 복원
+    _setTxReferral(tx.referral||'인스타그램');
+    _setTxTaxBtn(tx.membershipRegTaxType||'none');
+    document.getElementById('txRegPayment').value = tx.membershipRegPayment||'card';
     calcTxActual(); calcTxRegActual();
     setTxTypeById(tx.customerType);
     populateStoreInModal('txStore');
@@ -1595,11 +1638,13 @@ function openTxModal(txId) {
     document.getElementById('txDiscount').value      = '';
     document.getElementById('txRegAmount').value     = '';
     document.getElementById('txRegDiscount').value   = '';
-    document.getElementById('txRegActualWrap').style.display = 'none';
     document.getElementById('txPayment').value       = 'card';
     document.getElementById('txContract').checked    = false;
     document.getElementById('txPrivacy').checked     = false;
     document.getElementById('txNote').value          = '';
+    _setTxReferral('인스타그램');
+    _setTxTaxBtn('none');
+    document.getElementById('txRegPayment').value = 'card';
     setTxTypeById('new');
     populateStoreInModal('txStore');
     populateTeachers('txTeacher','txStore');
@@ -1613,6 +1658,28 @@ function openTxModal(txId) {
   modal.show();
 }
 function editTx(id) { openTxModal(id); }
+
+function onTxReferralChange() {
+  const sel = document.getElementById('txReferralSel').value;
+  const custom = document.getElementById('txReferralCustom');
+  custom.style.display = sel === '기타' ? '' : 'none';
+  if (sel !== '기타') custom.value = '';
+}
+
+function _setTxReferral(val) {
+  const options = ['인스타그램','네이버','지인소개','재방문','카카오'];
+  const sel = document.getElementById('txReferralSel');
+  const custom = document.getElementById('txReferralCustom');
+  if (options.includes(val)) {
+    sel.value = val;
+    custom.style.display = 'none';
+    custom.value = '';
+  } else {
+    sel.value = '기타';
+    custom.style.display = '';
+    custom.value = val || '';
+  }
+}
 
 function populateStoreInModal(selId) {
   const sel = document.getElementById(selId);
@@ -1654,15 +1721,35 @@ function fmtAmountInput(el) {
 function calcTxRegActual() {
   const amount = Number((document.getElementById('txRegAmount').value||'').replace(/,/g,''))||0;
   const disc   = Number(document.getElementById('txRegDiscount').value||0);
-  const wrap   = document.getElementById('txRegActualWrap');
-  if (!wrap) return;
-  if (amount > 0 && disc > 0) {
-    const actual = Math.round(amount * (1 - disc/100));
-    document.getElementById('txRegActualAmt').textContent =
-      `${fmtMoney(amount)} → ${fmtMoney(actual)} (${disc}% 할인)`;
-    wrap.style.display = '';
+  const el     = document.getElementById('txRegActualAmt');
+  if (!el) return;
+  if (amount <= 0) { el.textContent = '-'; el.style.color=''; return; }
+
+  const base = disc > 0 ? Math.round(amount * (1 - disc/100)) : amount; // 세금 전 실금액
+  let parts = [];
+  if (disc > 0) parts.push(`${disc}% 할인`);
+
+  let customerTotal = base; // 고객이 실제 내는 금액
+  if (_txTaxType === 'vat') {
+    const tax = Math.round(base * 0.1);
+    customerTotal = base + tax;
+    parts.push(`부가세 +${fmtMoney(tax)}`);
+    el.style.color = '#e17055';
+  } else if (_txTaxType === 'cash') {
+    const tax = Math.round(base * 0.1);
+    customerTotal = base + tax;
+    parts.push(`현금영수증 +${fmtMoney(tax)}`);
+    el.style.color = '#0984e3';
   } else {
-    wrap.style.display = 'none';
+    el.style.color = '#00b894';
+  }
+
+  // 실매출(base) vs 고객결제총액(customerTotal) 표시
+  const taxNote = parts.length ? ` (${parts.join(', ')})` : '';
+  if (_txTaxType !== 'none') {
+    el.textContent = `실매출 ${fmtMoney(base)} / 고객결제 ${fmtMoney(customerTotal)}${taxNote}`;
+  } else {
+    el.textContent = `${fmtMoney(amount)}${base !== amount ? ` → ${fmtMoney(base)}` + taxNote : ''}`;
   }
 }
 
@@ -1684,6 +1771,24 @@ function calcTxActual() {
 }
 
 let _txType = 'new';
+let _txTaxType = 'none'; // 'none' | 'vat' | 'cash'
+
+function setTxTax(type, btn) {
+  _txTaxType = type;
+  document.querySelectorAll('#txTaxGroup .tax-btn').forEach(b => b.className = 'tax-btn');
+  if (type === 'none') btn.className = 'tax-btn active-tax';
+  else if (type === 'vat')  btn.className = 'tax-btn vat-active';
+  else if (type === 'cash') btn.className = 'tax-btn cash-active';
+  calcTxRegActual();
+}
+
+function _setTxTaxBtn(type) {
+  _txTaxType = type || 'none';
+  const map = { none:'active-tax', vat:'vat-active', cash:'cash-active' };
+  document.querySelectorAll('#txTaxGroup .tax-btn').forEach(b => b.className = 'tax-btn');
+  const btn = document.getElementById(`taxBtn_${_txTaxType}`);
+  if (btn) btn.className = `tax-btn ${map[_txTaxType]}`;
+}
 function setTxType(t, btn) {
   _txType = t;
   document.querySelectorAll('#txTypeGroup .type-btn').forEach(b => b.className='type-btn');
@@ -1709,15 +1814,27 @@ function saveTx() {
   const actualAmount = discountPct > 0 ? Math.round(amount * (1 - discountPct/100)) : amount;
   const regRaw      = Number((document.getElementById('txRegAmount').value||'').replace(/,/g,''))||0;
   const regDiscount = Number(document.getElementById('txRegDiscount').value||0);
-  const membershipRegActualAmount = regRaw > 0 && regDiscount > 0 ? Math.round(regRaw*(1-regDiscount/100)) : regRaw;
+  const regTaxType  = _txTaxType;
+  // 실매출(인센티브 기준) = 세금 전 base 금액
+  const membershipRegActualAmount = regRaw > 0 && regDiscount > 0
+    ? Math.round(regRaw * (1 - regDiscount/100)) : regRaw;
+  // 고객 실결제 총액 (세금 포함, 영수증용)
+  const membershipRegTotalAmount = (regTaxType === 'vat' || regTaxType === 'cash')
+    ? Math.round(membershipRegActualAmount * 1.1) : membershipRegActualAmount;
   const name        = document.getElementById('txCustomerName').value.trim();
+  const referralSel = document.getElementById('txReferralSel').value;
+  const referralCustom = document.getElementById('txReferralCustom').value.trim();
+  const referral    = referralSel === '기타' ? (referralCustom || '기타') : referralSel;
 
   if (!name)              { alert('고객명을 입력해 주세요.'); return; }
   if (!amount && !regRaw) { alert('금액을 입력해 주세요.'); return; }
 
+  const txId = id || uid();
+  const txDate = document.getElementById('txDate').value;
+
   const tx = {
-    id:            id || uid(),
-    date:          document.getElementById('txDate').value,
+    id:            txId,
+    date:          txDate,
     storeId,
     customerId:    document.getElementById('txCustomer').value||null,
     customerName:  name,
@@ -1729,11 +1846,15 @@ function saveTx() {
     actualAmount,
     membershipRegAmount: regRaw,
     membershipRegDiscount: regDiscount,
-    membershipRegActualAmount,
+    membershipRegTaxType: regTaxType,
+    membershipRegPayment: document.getElementById('txRegPayment').value,
+    membershipRegActualAmount,      // 실매출 (세금 전, 인센티브 기준)
+    membershipRegTotalAmount,       // 고객결제 총액 (세금 포함)
     paymentType:   document.getElementById('txPayment').value,
     contractSigned: document.getElementById('txContract').checked,
     privacyAgreed:  document.getElementById('txPrivacy').checked,
     note:          document.getElementById('txNote').value.trim(),
+    referral,
     createdBy:     currentUser?.username||'',
     createdAt:     new Date().toISOString()
   };
@@ -1744,6 +1865,28 @@ function saveTx() {
   } else {
     db.transactions.push(tx);
   }
+
+  // ── 일일고객 명단 자동 연동 ──────────────────────────────
+  // 고객유형 → 방문구분 매핑
+  const typeToVcat = { new:'new', existing:'existing_sin', combeauty:'existing_cam', onetime:'onetime' };
+  const vcat = typeToVcat[_txType] || 'new';
+  // 기존 연동 항목 제거 후 재생성 (수정 시 덮어쓰기)
+  db.visitLogs = db.visitLogs.filter(v => v.txId !== txId);
+  if (teacherId) {
+    db.visitLogs.push({
+      id:        uid(),
+      txId,                 // 거래와 연결 키
+      date:      txDate,
+      storeId,
+      teacherId,
+      name,
+      referral,
+      cat:       vcat,
+      autoAdded: true,      // 자동 생성 표시
+    });
+  }
+  // ────────────────────────────────────────────────────────
+
   saveDB(db);
 
   const storeName = store?.name || '';
@@ -1756,6 +1899,8 @@ function saveTx() {
 function deleteTx(id) {
   if (!confirm('이 거래를 삭제할까요?')) return;
   db.transactions = db.transactions.filter(t=>t.id!==id);
+  // 연동된 방문 명단도 함께 삭제
+  db.visitLogs = db.visitLogs.filter(v => v.txId !== id);
   saveDB(db);
   renderAll();
 }
@@ -2162,6 +2307,9 @@ function buildTxMsg(tx, storeName, typeLabel) {
   const payLabel  = tx.paymentType === 'cash' ? '현금' : '카드';
   const svcActual = Number(tx.actualAmount ?? tx.amount ?? 0);
   const regActual = Number(tx.membershipRegActualAmount || 0);
+  const regTotal  = Number(tx.membershipRegTotalAmount  || regActual);
+  const taxType   = tx.membershipRegTaxType;
+  const hasTax    = taxType === 'vat' || taxType === 'cash';
   const lines = [
     `[${storeName}] 매출 ${typeLabel}`,
     `👤 ${tx.customerName} (${TYPE_LABELS[tx.customerType]||tx.customerType})`,
@@ -2172,8 +2320,17 @@ function buildTxMsg(tx, storeName, typeLabel) {
     lines.push(`📋 오늘 관리금액: ${fmtMoney(svcActual)}${discStr}`);
   }
   if (regActual > 0) {
-    const discStr = tx.membershipRegDiscount > 0 ? ` (할인 ${tx.membershipRegDiscount}%)` : '';
-    lines.push(`🎫 회원권 등록금액: ${fmtMoney(regActual)}${discStr}`);
+    const discStr  = tx.membershipRegDiscount > 0 ? ` (할인 ${tx.membershipRegDiscount}%)` : '';
+    const taxLabel = taxType === 'vat' ? '부가세' : taxType === 'cash' ? '현금영수증' : '';
+    const regPay   = tx.membershipRegPayment === 'cash' ? '현금' : '카드';
+    lines.push(`🎫 회원권 실매출: ${fmtMoney(regActual)}${discStr} / ${regPay}`);
+    if (hasTax) {
+      lines.push(`   └ ${taxLabel} 포함 결제총액: ${fmtMoney(regTotal)}`);
+    }
+  }
+  const totalPay = svcActual + (hasTax ? regTotal : regActual);
+  if (svcActual > 0 && regActual > 0) {
+    lines.push(`💰 결제 총액: ${fmtMoney(totalPay)}`);
   }
   lines.push(`👩‍🏫 담당: ${tx.teacherName||'-'}`);
   lines.push(`🕐 ${tx.date}`);
@@ -3035,38 +3192,128 @@ function deleteCost(id) {
 
 // ── 월별 방문 현황 (월별 탭용) ──
 function renderMonthlyVisitStats(y, m) {
-  const mgr      = isManager();
-  const teachers = db.teachers.filter(t => t.storeId === currentStoreId);
-  const visible  = mgr ? teachers : teachers.filter(t => t.id === currentUser?.teacherId);
-  const el       = document.getElementById('monthlyVisitStats');
+  const mgr   = isManager();
+  const el    = document.getElementById('monthlyVisitStats');
+  const stores = mgr ? db.stores : db.stores.filter(s => s.id === currentStoreId);
+  const catKeys = Object.keys(VCAT);
 
-  if (!visible.length) { el.innerHTML = ''; return; }
+  let py = y, pm = m - 1; if (pm < 1) { pm = 12; py--; }
 
-  el.innerHTML = `
-    <div class="table-wrap">
-      <table class="table mb-0 align-middle" style="font-size:.84rem;background:#fff;">
-        <thead style="background:#f8f9fc;">
-          <tr>
-            <th>선생님</th>
-            <th>총 방문</th>
-            ${Object.values(VCAT).map(c=>`<th><span class="badge rounded-pill" style="background:${c.color};color:${c.text};">${c.label}</span></th>`).join('')}
-          </tr>
-        </thead>
-        <tbody>
-          ${visible.map(te => {
-            const logs = visitLogsForTeacherMonth(te.id, y, m);
-            const catCells = Object.keys(VCAT).map(k =>
-              `<td><strong>${logs.filter(v=>v.cat===k).length}</strong></td>`
-            ).join('');
-            return `<tr>
-              <td><strong>${te.name}</strong></td>
-              <td><strong style="color:var(--primary);font-size:1rem;">${logs.length}</strong></td>
-              ${catCells}
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>
+  let html = '';
+
+  stores.forEach(store => {
+    const teachers = db.teachers.filter(t => t.storeId === store.id);
+    const visible  = mgr ? teachers : teachers.filter(t => t.id === currentUser?.teacherId);
+    if (!visible.length) return;
+
+    const txsThis = txsForMonth(store.id, y, m);
+    const txsPrev = txsForMonth(store.id, py, pm);
+
+    // 선생님별 행 데이터
+    const rows = visible.map(te => {
+      const logs     = visitLogsForTeacherMonth(te.id, y, m);
+      const logsPrev = visitLogsForTeacherMonth(te.id, py, pm);
+      const myTxs    = txsThis.filter(t => t.teacherId === te.id);
+      const sales    = sumAmount(myTxs);
+      const totalPrev = logsPrev.length;
+      const diff = logs.length - totalPrev;
+      const diffBadge = diff > 0
+        ? `<span style="color:#00b894;font-size:.72rem;">▲${diff}</span>`
+        : diff < 0
+        ? `<span style="color:#e17055;font-size:.72rem;">▼${Math.abs(diff)}</span>`
+        : `<span style="color:#b2bec3;font-size:.72rem;">-</span>`;
+
+      return { te, logs, sales, diff, diffBadge };
+    });
+
+    // 지점 합계
+    const storeVisit = rows.reduce((s,r)=>s+r.logs.length,0);
+    const storeSales = rows.reduce((s,r)=>s+r.sales,0);
+    const storePrevVisit = visible.reduce((s,te)=>s+visitLogsForTeacherMonth(te.id,py,pm).length,0);
+    const storeDiff = storeVisit - storePrevVisit;
+    const storeDiffBadge = storeDiff > 0
+      ? `<span style="color:#00b894;font-size:.72rem;">▲${storeDiff}</span>`
+      : storeDiff < 0
+      ? `<span style="color:#e17055;font-size:.72rem;">▼${Math.abs(storeDiff)}</span>`
+      : '';
+
+    html += `
+    <div class="mb-4">
+      <div style="font-size:.82rem;font-weight:700;color:#6c5ce7;margin-bottom:6px;">
+        <i class="bi bi-building me-1"></i>${store.name}
+        <span style="font-weight:400;color:#636e72;margin-left:8px;">방문 ${storeVisit}명 ${storeDiffBadge} / 매출 ${fmtMoney(storeSales)}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table mb-0 align-middle" style="font-size:.83rem;background:#fff;">
+          <thead style="background:#f8f9fc;">
+            <tr>
+              <th>선생님</th>
+              <th>총 방문</th>
+              <th style="font-size:.72rem;color:#636e72;">전달 대비</th>
+              ${catKeys.map(k=>`<th><span class="badge rounded-pill" style="background:${VCAT[k].color};color:${VCAT[k].text};font-size:.7rem;">${VCAT[k].label}</span></th>`).join('')}
+              <th style="color:#6c5ce7;">매출</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(({te,logs,sales,diffBadge})=>{
+              const catCells = catKeys.map(k =>
+                `<td>${logs.filter(v=>v.cat===k).length}</td>`
+              ).join('');
+              return `<tr>
+                <td><strong>${te.name}</strong></td>
+                <td><strong style="color:var(--primary);">${logs.length}</strong></td>
+                <td>${diffBadge}</td>
+                ${catCells}
+                <td class="fw-bold" style="color:#6c5ce7;">${fmtMoney(sales)}</td>
+              </tr>`;
+            }).join('')}
+            <tr style="background:#f8f9fc;font-weight:700;">
+              <td>합계</td>
+              <td style="color:var(--primary);">${storeVisit}</td>
+              <td>${storeDiffBadge}</td>
+              ${catKeys.map(k=>`<td>${rows.reduce((s,r)=>s+r.logs.filter(v=>v.cat===k).length,0)}</td>`).join('')}
+              <td style="color:#6c5ce7;">${fmtMoney(storeSales)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>`;
+  });
+
+  el.innerHTML = html || '<div class="empty-state">데이터 없음</div>';
+}
+
+function exportMonthlyVisitExcel() {
+  const y = calMonth.getFullYear(), m = calMonth.getMonth() + 1;
+  let py = y, pm = m - 1; if (pm < 1) { pm = 12; py--; }
+  const catKeys = Object.keys(VCAT);
+  const catLabels = catKeys.map(k => VCAT[k].label);
+
+  const headers = ['지점', '선생님', '총 방문', `전달(${pm}월)`, '전달 대비', ...catLabels, '매출'];
+  const rows = [];
+
+  db.stores.forEach(store => {
+    const teachers = db.teachers.filter(t => t.storeId === store.id);
+    teachers.forEach(te => {
+      const logs     = visitLogsForTeacherMonth(te.id, y, m);
+      const logsPrev = visitLogsForTeacherMonth(te.id, py, pm);
+      const txs      = txsForMonth(store.id, y, m).filter(t => t.teacherId === te.id);
+      const sales    = sumAmount(txs);
+      const diff     = logs.length - logsPrev.length;
+      rows.push([
+        store.name, te.name, logs.length, logsPrev.length,
+        diff > 0 ? `+${diff}` : diff,
+        ...catKeys.map(k => logs.filter(v=>v.cat===k).length),
+        sales
+      ]);
+    });
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = [{wch:10},{wch:10},{wch:8},{wch:10},{wch:8},...catKeys.map(()=>({wch:8})),{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws, `${y}년${m}월_방문매출`);
+  XLSX.writeFile(wb, `지점별방문매출_${y}년${m}월.xlsx`);
 }
 
 // ════════════════════════════════════════════════
@@ -3131,17 +3378,41 @@ function renderVisitSection() {
     _vlogTeacherId = visibleTeachers[0].id;
   }
 
-  // 탭 버튼 렌더
-  document.getElementById('visitTeacherTabs').innerHTML = visibleTeachers.map(t =>
+  // 탭 버튼 + 초기화 버튼 렌더
+  const tabsHtml = visibleTeachers.map(t =>
     `<button class="teacher-tab-btn ${t.id === _vlogTeacherId ? 'active' : ''}"
        onclick="switchVlogTeacher('${t.id}')">
        ${t.name}
      </button>`
   ).join('');
 
+  const clearBtn = mgr
+    ? `<button class="btn btn-sm btn-outline-danger ms-auto" style="border-radius:20px;font-size:.75rem;"
+         onclick="clearMonthVisitLogs()">
+         <i class="bi bi-trash me-1"></i>이번달 명단 초기화
+       </button>`
+    : '';
+
+  document.getElementById('visitTeacherTabs').innerHTML =
+    `<div class="d-flex flex-wrap align-items-center gap-2 w-100">${tabsHtml}${clearBtn}</div>`;
+
   renderVisitStats();
   renderVisitTable();
   resetVlogForm();
+}
+
+function clearMonthVisitLogs() {
+  const y = new Date(currentDate).getFullYear();
+  const m = new Date(currentDate).getMonth() + 1;
+  const prefix = `${y}-${String(m).padStart(2,'0')}`;
+  const target = db.visitLogs.filter(v => v.teacherId === _vlogTeacherId && v.date.startsWith(prefix));
+  if (!target.length) { alert('삭제할 항목이 없습니다.'); return; }
+  const tName = db.teachers.find(t => t.id === _vlogTeacherId)?.name || '선생님';
+  if (!confirm(`${tName}의 ${y}년 ${m}월 방문 명단 ${target.length}건을 모두 삭제할까요?`)) return;
+  db.visitLogs = db.visitLogs.filter(v => !(v.teacherId === _vlogTeacherId && v.date.startsWith(prefix)));
+  saveDB(db);
+  renderVisitStats();
+  renderVisitTable();
 }
 
 function switchVlogTeacher(tid) {
@@ -3168,21 +3439,24 @@ function renderVisitStats() {
 
   document.getElementById('visitStats').innerHTML = `
     <div class="col-6 col-md-3">
-      <div class="visit-stat-chip">
-        <div style="font-size:.72rem;color:#636e72;margin-bottom:2px;">📅 오늘 방문</div>
+      <div class="visit-stat-chip" onclick="openVisitListModal('day')" style="cursor:pointer;" title="클릭하면 명단 보기">
+        <div style="font-size:.72rem;color:#636e72;margin-bottom:2px;">📅 오늘 방문 <i class="bi bi-search" style="font-size:.65rem;"></i></div>
         <div style="font-size:1.6rem;font-weight:800;color:var(--primary);">${dayLogs.length}<span style="font-size:.85rem;font-weight:500;"> 명</span></div>
         <div class="mt-1">${catBadges}</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
-      <div class="visit-stat-chip">
-        <div style="font-size:.72rem;color:#636e72;margin-bottom:2px;">📆 이번달 방문</div>
+      <div class="visit-stat-chip" onclick="openVisitListModal('month')" style="cursor:pointer;" title="클릭하면 명단 보기">
+        <div style="font-size:.72rem;color:#636e72;margin-bottom:2px;">📆 이번달 방문 <i class="bi bi-search" style="font-size:.65rem;"></i></div>
         <div style="font-size:1.6rem;font-weight:800;color:#00b894;">${monthLogs.length}<span style="font-size:.85rem;font-weight:500;"> 명</span></div>
         <div style="font-size:.72rem;color:#636e72;margin-top:4px;">누적 방문 합계</div>
       </div>
     </div>
     <div class="col-12 col-md-6">
-      <div class="visit-stat-chip d-flex flex-wrap gap-2 align-items-center h-100">
+      <div class="visit-stat-chip d-flex flex-wrap gap-2 align-items-center h-100" onclick="openVisitChartModal()" style="cursor:pointer;" title="클릭하면 차트/전달 비교">
+        <div class="w-100 d-flex justify-content-between align-items-center mb-1">
+          <span style="font-size:.72rem;color:#636e72;">이번달 구분별 <i class="bi bi-bar-chart-fill" style="font-size:.65rem;"></i></span>
+        </div>
         ${Object.entries(VCAT).map(([k, c]) => {
           const mCount = monthLogs.filter(v => v.cat === k).length;
           return `<div style="text-align:center;min-width:60px;">
@@ -3211,9 +3485,10 @@ function renderVisitTable() {
   tbody.innerHTML = logs.map((v, i) => {
     const c = VCAT[v.cat] || VCAT.new;
     const canDel = mgr || (currentUser?.teacherId === v.teacherId);
+    const autoTag = v.autoAdded ? `<span style="font-size:.68rem;color:#a29bfe;margin-left:4px;">거래연동</span>` : '';
     return `<tr class="visit-row ${c.borderCls}" style="background:#fff;">
       <td style="color:#b2bec3;font-size:.78rem;">${i + 1}</td>
-      <td><strong>${v.name}</strong></td>
+      <td><strong>${v.name}</strong>${autoTag}</td>
       <td style="font-size:.8rem;color:#636e72;">${v.referral || '-'}</td>
       <td>
         <span class="badge rounded-pill vcat-${v.cat}" style="font-size:.75rem;background:${c.color};color:${c.text};">
@@ -3284,6 +3559,171 @@ function exportCustomersExcel(){
   const wb=XLSX.utils.book_new();const ws=XLSX.utils.aoa_to_sheet([['이름','연락처','고객유형','계약서','개인정보동의','등록일','메모'],...rows]);ws['!cols']=[{wch:12},{wch:16},{wch:14},{wch:8},{wch:12},{wch:12},{wch:20}];
   XLSX.utils.book_append_sheet(wb,ws,'고객목록');XLSX.writeFile(wb,`고객목록_${currentDate}.xlsx`);
 }
+
+let _visitChartInst = null;
+
+function openVisitChartModal() {
+  const tName = db.teachers.find(t => t.id === _vlogTeacherId)?.name || '선생님';
+  const now  = new Date(currentDate);
+  const y = now.getFullYear(), m = now.getMonth() + 1;
+  let py = y, pm = m - 1; if (pm < 1) { pm = 12; py--; }
+
+  const thisLogs = visitLogsForTeacherMonth(_vlogTeacherId, y, m);
+  const prevLogs = visitLogsForTeacherMonth(_vlogTeacherId, py, pm);
+
+  const cats  = Object.keys(VCAT);
+  const labels = cats.map(k => VCAT[k].label);
+  const colors = cats.map(k => VCAT[k].color);
+  const thisData = cats.map(k => thisLogs.filter(v => v.cat === k).length);
+  const prevData = cats.map(k => prevLogs.filter(v => v.cat === k).length);
+
+  // 전달 대비 텍스트
+  const totalThis = thisLogs.length, totalPrev = prevLogs.length;
+  const diff = totalThis - totalPrev;
+  const diffStr = diff > 0 ? `<span style="color:#00b894;">▲ ${diff}명 증가</span>`
+                : diff < 0 ? `<span style="color:#e17055;">▼ ${Math.abs(diff)}명 감소</span>`
+                : `<span style="color:#636e72;">변동 없음</span>`;
+
+  document.getElementById('visitChartModalLabel').textContent = `${tName} — ${y}년 ${m}월 방문 분석`;
+  document.getElementById('visitChartSummary').innerHTML = `
+    <div class="d-flex gap-3 flex-wrap mb-2" style="font-size:.85rem;">
+      <span>이번달 <strong style="color:var(--primary);">${totalThis}명</strong></span>
+      <span>전달 <strong style="color:#636e72;">${totalPrev}명</strong></span>
+      <span>전달 대비 ${diffStr}</span>
+    </div>`;
+
+  const modal = new bootstrap.Modal(document.getElementById('visitChartModal'));
+  modal.show();
+
+  setTimeout(() => {
+    const ctx = document.getElementById('visitChartCanvas').getContext('2d');
+    if (_visitChartInst) _visitChartInst.destroy();
+    _visitChartInst = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: `${m}월 (이번달)`, data: thisData, backgroundColor: colors, borderRadius: 8 },
+          { label: `${pm}월 (전달)`,  data: prevData, backgroundColor: colors.map(c => c + '66'), borderRadius: 8 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}명` } }
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1 } }
+        }
+      }
+    });
+  }, 300);
+}
+
+function exportVisitChartExcel() {
+  const tName = db.teachers.find(t => t.id === _vlogTeacherId)?.name || '선생님';
+  const now = new Date(currentDate);
+  const y = now.getFullYear(), m = now.getMonth() + 1;
+  let py = y, pm = m - 1; if (pm < 1) { pm = 12; py--; }
+
+  const thisLogs = visitLogsForTeacherMonth(_vlogTeacherId, y, m);
+  const prevLogs = visitLogsForTeacherMonth(_vlogTeacherId, py, pm);
+  const cats = Object.keys(VCAT);
+
+  const headers = ['구분', `${m}월 (이번달)`, `${pm}월 (전달)`, '증감'];
+  const rows = cats.map(k => {
+    const t = thisLogs.filter(v => v.cat === k).length;
+    const p = prevLogs.filter(v => v.cat === k).length;
+    return [VCAT[k].label, t, p, t - p];
+  });
+  rows.push(['합계', thisLogs.length, prevLogs.length, thisLogs.length - prevLogs.length]);
+
+  // 상세 명단
+  const detailHeaders = ['날짜', '고객명', '유입경로', '구분'];
+  const detailRows = thisLogs.map(v => [v.date, v.name, v.referral||'-', VCAT[v.cat]?.label||v.cat]);
+
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws1['!cols'] = [{wch:12},{wch:12},{wch:12},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, ws1, '구분별 통계');
+
+  const ws2 = XLSX.utils.aoa_to_sheet([detailHeaders, ...detailRows]);
+  ws2['!cols'] = [{wch:12},{wch:14},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws2, `${m}월 방문 명단`);
+
+  XLSX.writeFile(wb, `${tName}_방문통계_${y}년${m}월.xlsx`);
+}
+
+function openVisitListModal(mode) {
+  const tName = db.teachers.find(t => t.id === _vlogTeacherId)?.name || '선생님';
+  const y = new Date(currentDate).getFullYear();
+  const m = new Date(currentDate).getMonth() + 1;
+  const isDay = mode === 'day';
+  const logs = isDay
+    ? visitLogsForTeacherDay(_vlogTeacherId, currentDate)
+    : visitLogsForTeacherMonth(_vlogTeacherId, y, m);
+
+  const title = isDay
+    ? `${tName} — 오늘 방문 (${currentDate})`
+    : `${tName} — ${y}년 ${m}월 방문 명단`;
+
+  const rows = logs.length
+    ? logs.map((v, i) => {
+        const c = VCAT[v.cat] || VCAT.new;
+        return `<tr>
+          <td style="color:#b2bec3;font-size:.78rem;">${i+1}</td>
+          ${!isDay ? `<td style="font-size:.8rem;">${v.date}</td>` : ''}
+          <td><strong>${v.name}</strong></td>
+          <td style="font-size:.8rem;color:#636e72;">${v.referral||'-'}</td>
+          <td><span class="badge rounded-pill" style="background:${c.color};color:${c.text};font-size:.72rem;">${c.label}</span></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="${isDay?4:5}" style="text-align:center;padding:20px;color:#b2bec3;">방문 기록이 없습니다</td></tr>`;
+
+  const dateCol = isDay ? '' : '<th>날짜</th>';
+  document.getElementById('visitListModalLabel').textContent = title;
+  document.getElementById('visitListModalBody').innerHTML = `
+    <table class="table table-sm align-middle mb-0" style="font-size:.85rem;">
+      <thead style="background:#f8f9fc;">
+        <tr><th>#</th>${dateCol}<th>고객명</th><th>유입경로</th><th>구분</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  new bootstrap.Modal(document.getElementById('visitListModal')).show();
+}
 </script>
+
+<!-- ── 방문 차트 모달 ── -->
+<div class="modal fade" id="visitChartModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-centered modal-lg">
+<div class="modal-content">
+  <div class="modal-header">
+    <h5 class="modal-title fw-bold" id="visitChartModalLabel"></h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  </div>
+  <div class="modal-body">
+    <div id="visitChartSummary"></div>
+    <canvas id="visitChartCanvas" height="180"></canvas>
+  </div>
+  <div class="modal-footer border-0 pt-0">
+    <button class="btn btn-sm btn-success" style="border-radius:20px;" onclick="exportVisitChartExcel()">
+      <i class="bi bi-file-earmark-excel me-1"></i>엑셀 출력
+    </button>
+    <button class="btn btn-sm btn-light" data-bs-dismiss="modal">닫기</button>
+  </div>
+</div></div></div>
+
+<!-- ── 방문 명단 상세 모달 ── -->
+<div class="modal fade" id="visitListModal" tabindex="-1">
+<div class="modal-dialog modal-dialog-scrollable modal-lg">
+<div class="modal-content">
+  <div class="modal-header">
+    <h5 class="modal-title fw-bold" id="visitListModalLabel"></h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+  </div>
+  <div class="modal-body p-0" id="visitListModalBody"></div>
+</div></div></div>
+
 </body>
 </html>
