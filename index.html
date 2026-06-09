@@ -280,6 +280,8 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
       <i class="bi bi-bell-fill fs-5"></i>
       <div class="notif-badge" id="notifBadge" style="display:none;">0</div>
     </div>
+    <!-- 동기화 상태 -->
+    <span id="syncStatus" style="font-size:.68rem;color:#b2bec3;"></span>
     <!-- user chip -->
     <span class="user-chip" id="userChip" onclick="openUserMenu()" style="cursor:pointer;"></span>
     <!-- settings (manager only) -->
@@ -1166,19 +1168,57 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // ════════════════════════════════════════════════
 //  DATA LAYER
 // ════════════════════════════════════════════════
 const DB_KEY = 'salesApp_v2';
+const SUPA_URL = 'https://uevmqsgxtfuvimeyxcoh.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVldm1xc2d4dGZ1dmltZXl4Y29oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5NjYyMDcsImV4cCI6MjA5NDU0MjIwN30.gCy21Ovj44IL_jBTB7w5AFCp0Qo3hLPd_6joV6usWzE';
+const _supa = window.supabase?.createClient(SUPA_URL, SUPA_KEY);
 
+// 동기 로컬 캐시 로드
 function loadDB() {
   const raw = localStorage.getItem(DB_KEY);
   if (raw) return JSON.parse(raw);
   return { stores:[], teachers:[], customers:[], transactions:[], users:[], notifications:[], settings:{} };
 }
-function saveDB(db) { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+
+// 저장: localStorage + Supabase 동시
+function saveDB(db) {
+  localStorage.setItem(DB_KEY, JSON.stringify(db));
+  _syncToSupabase(db);
+}
+
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+// Supabase 비동기 저장
+async function _syncToSupabase(dbData) {
+  if (!_supa) return;
+  try {
+    await _supa.from('app_data').upsert({ id: 'main', data: dbData, updated_at: new Date().toISOString() });
+  } catch(e) { console.warn('Supabase 동기화 실패:', e); }
+}
+
+// 앱 시작 시 Supabase에서 최신 데이터 로드
+async function _loadFromSupabase() {
+  if (!_supa) return null;
+  try {
+    const { data, error } = await _supa.from('app_data').select('data').eq('id','main').single();
+    if (error || !data) return null;
+    return data.data;
+  } catch(e) { return null; }
+}
+
+// 동기화 상태 표시
+function _showSyncStatus(msg, color) {
+  let el = document.getElementById('syncStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = color;
+  if (color === '#00b894') setTimeout(() => { el.textContent = '☁️ 동기화됨'; }, 2000);
+}
 
 let db = loadDB();
 // migrate older DB key
@@ -1367,8 +1407,25 @@ function todayStr() {
   return new Date().toISOString().slice(0,10);
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('dateSelect').value = currentDate;
+
+  // Supabase에서 최신 데이터 로드 (로컬보다 우선)
+  const syncEl = document.getElementById('syncStatus');
+  if (syncEl) { syncEl.textContent = '☁️ 불러오는 중...'; syncEl.style.color = '#b2bec3'; }
+
+  const supaData = await _loadFromSupabase();
+  if (supaData) {
+    // Supabase 데이터가 있으면 덮어씀
+    Object.assign(db, supaData);
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+    if (syncEl) { syncEl.textContent = '☁️ 동기화됨'; syncEl.style.color = '#00b894'; }
+  } else {
+    // Supabase 없으면 로컬 데이터를 Supabase에 올림
+    _syncToSupabase(db);
+    if (syncEl) { syncEl.textContent = syncEl ? '☁️ 로컬 데이터 사용 중' : ''; syncEl.style.color = '#fdcb6e'; }
+  }
+
   // try resume session
   const savedId = sessionStorage.getItem('salesUserId');
   if (savedId && db.users.find(u => u.id === savedId)) {
