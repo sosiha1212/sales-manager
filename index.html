@@ -134,12 +134,13 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 
 /* ── TOAST ── */
 #txToast {
-  position:fixed; bottom:20px; right:20px; z-index:1100;
+  position:fixed; bottom:20px; right:20px; z-index:1055;
   background:#2d3436; color:#fff; border-radius:16px; padding:14px 18px;
   box-shadow:0 8px 24px rgba(0,0,0,.2); max-width:320px; display:none;
 }
 
 @media(max-width:768px){
+  #txToast { top:16px; bottom:auto; right:12px; left:12px; max-width:100%; z-index:1040; }
   .cal-day { min-height:72px; font-size:.7rem; padding:4px; }
   .cal-day .day-amount { font-size:.62rem; }
   .cal-store-row { font-size:.6rem; }
@@ -1818,6 +1819,9 @@ function renderTeacherSummary() {
 //  TRANSACTION MODAL
 // ════════════════════════════════════════════════
 function openTxModal(txId) {
+  // 이전 토스트가 떠 있으면 닫기
+  const toast = document.getElementById('txToast');
+  if (toast) { toast.style.display = 'none'; clearTimeout(toast._timer); }
   const modal = new bootstrap.Modal(document.getElementById('txModal'));
   document.getElementById('txEditId').value = txId||'';
   document.getElementById('txModalTitle').textContent = txId ? '거래 수정' : '거래 추가';
