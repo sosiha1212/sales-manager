@@ -304,6 +304,7 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
     <strong id="toastTitle" style="font-size:.9rem;"></strong>
     <button onclick="document.getElementById('txToast').style.display='none'" style="background:none;border:none;color:#b2bec3;font-size:1rem;cursor:pointer;">✕</button>
   </div>
+  <div style="font-size:.75rem;color:#55efc4;font-weight:700;margin-bottom:4px;">✅ 저장 완료</div>
   <div id="toastBody" style="font-size:.8rem;color:#dfe6e9;margin-bottom:10px;"></div>
   <button class="btn btn-sm w-100 fw-bold" style="background:#fee500;color:#3c1e1e;border-radius:10px;" onclick="sendKakaoNotif()">
     <i class="bi bi-chat-fill me-1"></i>카카오톡으로 알림 보내기
@@ -2715,17 +2716,22 @@ function showToast(type, tx, storeName, msg) {
 function sendKakaoNotif() {
   const link = db.settings?.kakaoLink||'';
   const msg  = _lastNotifMsg || '새 매출이 등록됐습니다.';
-  // Copy to clipboard
   navigator.clipboard?.writeText(msg).catch(()=>{});
-  // Try to open KakaoTalk (mobile) or the open chat link
   if (link) {
     window.open(link, '_blank');
   } else {
-    // Mobile: open KakaoTalk with text prefilled
     const encoded = encodeURIComponent(msg);
     const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-    if (isMobile) window.location.href = `kakaotalk://send?text=${encoded}`;
-    else alert('📋 메시지가 클립보드에 복사됐습니다!\n카카오톡에 붙여넣기 하세요.\n\n' + msg);
+    if (isMobile) {
+      // window.open으로 열어서 페이지 이동 방지
+      const opened = window.open(`kakaotalk://send?text=${encoded}`, '_blank');
+      if (!opened) {
+        // 팝업 차단된 경우 클립보드 복사 안내
+        alert('📋 메시지가 클립보드에 복사됐습니다!\n카카오톡에 붙여넣기 하세요.');
+      }
+    } else {
+      alert('📋 메시지가 클립보드에 복사됐습니다!\n카카오톡에 붙여넣기 하세요.\n\n' + msg);
+    }
   }
 }
 
