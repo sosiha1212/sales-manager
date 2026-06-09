@@ -184,6 +184,13 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 .vcat-existing_sin { background:#00b894; color:#fff; }
 .vcat-onetime      { background:#fdcb6e; color:#333; }
 .visit-row { transition:.15s; }
+/* ── MONTHLY CUSTOMER LIST ── */
+.mcl-store-header { background:linear-gradient(135deg,#6c5ce7,#a29bfe); color:#fff; padding:8px 14px; border-radius:10px 10px 0 0; font-weight:700; font-size:.88rem; }
+.mcl-teacher-header { background:#f0f0ff; padding:5px 12px; font-weight:700; font-size:.82rem; color:#6c5ce7; border-bottom:2px solid #e0d8ff; }
+.mcl-name-new          { color:#d63170; font-weight:700; }
+.mcl-name-existing_cam { color:#5a4fcf; font-weight:700; }
+.mcl-name-existing_sin { color:#00916e; font-weight:700; }
+.mcl-name-onetime      { color:#b7860b; font-weight:600; }
 .visit-row:hover { background:#f8f0ff !important; }
 .vborder-new          { border-left:4px solid #fd79a8 !important; }
 .vborder-existing_cam { border-left:4px solid #6c5ce7 !important; }
@@ -535,6 +542,26 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
         </button>
       </div>
       <div id="monthlyVisitStats"></div>
+    </div>
+
+    <!-- 한달 고객 명단 -->
+    <div class="mt-4">
+      <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+        <div class="section-title mb-0">한달 고객 명단</div>
+        <div class="d-flex align-items-center gap-2">
+          <!-- 구분 범례 -->
+          <div class="d-flex gap-2" style="font-size:.72rem;">
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#fd79a8;margin-right:2px;"></span>신규</span>
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#6c5ce7;margin-right:2px;"></span>기존(캄)</span>
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#00b894;margin-right:2px;"></span>기존(신)</span>
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#fdcb6e;margin-right:2px;"></span>일회성</span>
+          </div>
+          <button class="btn btn-sm btn-outline-success" style="border-radius:20px;font-size:.78rem;" onclick="exportMonthlyCustomerListExcel()">
+            <i class="bi bi-file-earmark-excel me-1"></i>엑셀
+          </button>
+        </div>
+      </div>
+      <div id="monthlyCustomerList"></div>
     </div>
   </div>
 
@@ -2180,6 +2207,7 @@ function renderMonthly(){
   initTeacherSalesSelectors(y,m+1);
   renderTeacherSalesSection();
   renderMonthlyVisitStats(y,m+1);
+  renderMonthlyCustomerList(y,m+1);
 }
 
 function renderMonthlyStats(y,m){
@@ -3570,6 +3598,149 @@ function exportMonthlyVisitExcel() {
   ws['!cols'] = [{wch:10},{wch:10},{wch:8},{wch:10},{wch:8},...catKeys.map(()=>({wch:8})),{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws, `${y}년${m}월_방문매출`);
   XLSX.writeFile(wb, `지점별방문매출_${y}년${m}월.xlsx`);
+}
+
+// ════════════════════════════════════════════════
+//  MONTHLY CUSTOMER LIST — 한달 고객 명단
+// ════════════════════════════════════════════════
+function renderMonthlyCustomerList(y, m) {
+  const el = document.getElementById('monthlyCustomerList');
+  const stores = isManager() ? db.stores : db.stores.filter(s => s.id === currentStoreId);
+  let html = '';
+
+  stores.forEach((store, sIdx) => {
+    const teachers = db.teachers.filter(t => t.storeId === store.id);
+    if (!teachers.length) return;
+
+    const storeColor_ = storeColor(db.stores.indexOf(store));
+    let storeHtml = '';
+    let storeTotalCount = 0;
+
+    teachers.forEach(te => {
+      const logs = visitLogsForTeacherMonth(te.id, y, m)
+        .slice().sort((a, b) => a.date.localeCompare(b.date));
+      if (!logs.length) return;
+      storeTotalCount += logs.length;
+
+      // 날짜별 그룹핑
+      const byDate = {};
+      logs.forEach(v => {
+        if (!byDate[v.date]) byDate[v.date] = [];
+        byDate[v.date].push(v);
+      });
+
+      // 날짜 컬럼 목록 (1일~말일)
+      const dates = Object.keys(byDate).sort();
+      const lastDay = new Date(y, m, 0).getDate();
+      const allDates = Array.from({length: lastDay}, (_, i) =>
+        `${y}-${String(m).padStart(2,'0')}-${String(i+1).padStart(2,'0')}`
+      );
+
+      // 테이블 헤더: 날짜 컬럼
+      const dateHeaders = allDates.map(d => {
+        const day = Number(d.slice(-2));
+        const dow = ['일','월','화','수','목','금','토'][new Date(d).getDay()];
+        const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6;
+        return `<th style="text-align:center;font-size:.68rem;padding:4px 3px;min-width:32px;${isWeekend?'color:#e17055;':''}">${day}<br><span style="font-weight:400;">${dow}</span></th>`;
+      }).join('');
+
+      // 각 날짜 셀: 해당 날짜 고객명 표시
+      const dateCells = allDates.map(d => {
+        const dayLogs = byDate[d] || [];
+        if (!dayLogs.length) return `<td style="text-align:center;padding:3px;background:#fafafa;"></td>`;
+        const names = dayLogs.map(v => {
+          const cls = `mcl-name-${v.cat || 'new'}`;
+          const c = VCAT[v.cat] || VCAT.new;
+          return `<div class="${cls}" style="font-size:.72rem;white-space:nowrap;padding:1px 0;" title="${c.label}">${v.name}</div>`;
+        }).join('');
+        return `<td style="padding:3px 4px;vertical-align:top;">${names}</td>`;
+      }).join('');
+
+      // 소계 셀
+      const countCells = allDates.map(d => {
+        const n = (byDate[d] || []).length;
+        return `<td style="text-align:center;font-size:.72rem;font-weight:700;padding:3px;color:${n?'#6c5ce7':'#dfe6e9'};">${n||''}</td>`;
+      }).join('');
+
+      const catCounts = Object.keys(VCAT).map(k => {
+        const n = logs.filter(v => v.cat === k).length;
+        return n > 0 ? `<span class="badge rounded-pill" style="background:${VCAT[k].color};color:${VCAT[k].text};font-size:.65rem;">${VCAT[k].label} ${n}</span>` : '';
+      }).join('');
+
+      storeHtml += `
+        <div class="mcl-teacher-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-person me-1"></i>${te.name} <span style="font-weight:400;color:#636e72;font-size:.78rem;">${logs.length}명</span></span>
+          <div class="d-flex gap-1 flex-wrap">${catCounts}</div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="border-collapse:collapse;width:100%;background:#fff;font-size:.78rem;">
+            <thead>
+              <tr style="background:#f8f9fc;">
+                <th style="padding:4px 8px;font-size:.72rem;white-space:nowrap;min-width:60px;">구분</th>
+                ${dateHeaders}
+                <th style="padding:4px 6px;font-size:.72rem;text-align:center;">합계</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid #f0f0f0;">
+                <td style="padding:4px 8px;font-weight:600;color:#636e72;font-size:.72rem;white-space:nowrap;">고객명</td>
+                ${dateCells}
+                <td style="text-align:center;font-weight:800;color:#6c5ce7;padding:4px;">${logs.length}</td>
+              </tr>
+              <tr style="background:#f8f9ff;">
+                <td style="padding:3px 8px;font-size:.68rem;color:#b2bec3;">일별 수</td>
+                ${countCells}
+                <td style="text-align:center;font-weight:700;font-size:.78rem;color:#6c5ce7;">${logs.length}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>`;
+    });
+
+    if (!storeHtml) return;
+    html += `
+      <div class="mb-4" style="border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08);">
+        <div class="mcl-store-header" style="background:linear-gradient(135deg,${storeColor_},${storeColor_}cc);">
+          <i class="bi bi-building me-1"></i>${store.name}
+          <span style="font-weight:400;font-size:.8rem;margin-left:8px;opacity:.9;">${storeTotalCount}명</span>
+        </div>
+        ${storeHtml}
+      </div>`;
+  });
+
+  el.innerHTML = html || '<div class="empty-state">방문 기록 없음</div>';
+}
+
+function exportMonthlyCustomerListExcel() {
+  const y = calMonth.getFullYear(), m = calMonth.getMonth() + 1;
+  const wb = XLSX.utils.book_new();
+
+  db.stores.forEach(store => {
+    const teachers = db.teachers.filter(t => t.storeId === store.id);
+    const allRows = [];
+    const headers = ['지점', '선생님', '날짜', '고객명', '유입경로', '구분'];
+    allRows.push(headers);
+
+    teachers.forEach(te => {
+      const logs = visitLogsForTeacherMonth(te.id, y, m)
+        .slice().sort((a, b) => a.date.localeCompare(b.date));
+      logs.forEach(v => {
+        allRows.push([
+          store.name, te.name, v.date, v.name,
+          v.referral || '-',
+          VCAT[v.cat]?.label || v.cat
+        ]);
+      });
+    });
+
+    if (allRows.length > 1) {
+      const ws = XLSX.utils.aoa_to_sheet(allRows);
+      ws['!cols'] = [{wch:10},{wch:10},{wch:12},{wch:12},{wch:12},{wch:8}];
+      XLSX.utils.book_append_sheet(wb, ws, store.name.slice(0,31));
+    }
+  });
+
+  XLSX.writeFile(wb, `고객명단_${y}년${m}월.xlsx`);
 }
 
 // ════════════════════════════════════════════════
