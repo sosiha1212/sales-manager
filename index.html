@@ -1188,6 +1188,8 @@ function loadDB() {
 
 // 저장: localStorage + Supabase 동시
 function saveDB(db) {
+  if (!db._savedAt) db._savedAt = new Date().toISOString();
+  db._savedAt = new Date().toISOString();
   localStorage.setItem(DB_KEY, JSON.stringify(db));
   _syncToSupabase(db);
 }
@@ -1417,14 +1419,21 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const supaData = await _loadFromSupabase();
   if (supaData) {
-    // Supabase 데이터가 있으면 덮어씀
-    Object.assign(db, supaData);
-    localStorage.setItem(DB_KEY, JSON.stringify(db));
-    if (syncEl) { syncEl.textContent = '☁️ 동기화됨'; syncEl.style.color = '#00b894'; }
+    // 타임스탬프 비교: 더 최신 데이터를 사용
+    const localTime = db._savedAt ? new Date(db._savedAt).getTime() : 0;
+    const supaTime  = supaData._savedAt ? new Date(supaData._savedAt).getTime() : 0;
+    if (supaTime >= localTime) {
+      Object.assign(db, supaData);
+      localStorage.setItem(DB_KEY, JSON.stringify(db));
+      if (syncEl) { syncEl.textContent = '☁️ 동기화됨'; syncEl.style.color = '#00b894'; }
+    } else {
+      // 로컬이 더 최신 → 로컬 데이터로 Supabase 업데이트
+      _syncToSupabase(db);
+      if (syncEl) { syncEl.textContent = '☁️ 동기화됨'; syncEl.style.color = '#00b894'; }
+    }
   } else {
-    // Supabase 없으면 로컬 데이터를 Supabase에 올림
     _syncToSupabase(db);
-    if (syncEl) { syncEl.textContent = syncEl ? '☁️ 로컬 데이터 사용 중' : ''; syncEl.style.color = '#fdcb6e'; }
+    if (syncEl) { syncEl.textContent = '☁️ 로컬 데이터 사용 중'; syncEl.style.color = '#fdcb6e'; }
   }
 
   // try resume session
@@ -2095,7 +2104,8 @@ function saveTx() {
   const storeName = store?.name || '';
   pushNotification(isEdit ? 'tx_edit' : 'tx_add', tx, storeName);
 
-  bootstrap.Modal.getInstance(document.getElementById('txModal')).hide();
+  const _txModalInst = bootstrap.Modal.getInstance(document.getElementById('txModal'));
+  if (_txModalInst) _txModalInst.hide();
   renderAll();
 }
 
