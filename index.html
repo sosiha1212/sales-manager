@@ -1687,7 +1687,6 @@ function renderTeacherSummary() {
               <span>${fmtMoney(inc.memberAmt)} → <strong class="incentive-text">${fmtMoney(inc.memberInc)}</strong></span>
             </div>
             <hr class="my-1">
-            <div class="d-flex justify-content-between mb-1"><span>기본급</span><span>${fmtMoney(inc.baseSalary)}</span></div>
             <div class="d-flex justify-content-between mb-1"><span>인센티브</span><strong class="incentive-text">${fmtMoney(incOnly)}</strong></div>
             <div class="d-flex justify-content-between mb-1" style="color:#e17055;font-size:.8rem;"><span>소득공제 3.3%</span><span>− ${fmtMoney(inc.deduction)}</span></div>
             <div class="d-flex justify-content-between" style="background:#f0fff8;border-radius:8px;padding:6px 8px;margin-top:2px;">
@@ -1708,7 +1707,6 @@ function renderTeacherSummary() {
             <div class="d-flex justify-content-between mb-1"><span>실관리금액</span><span class="fw-bold amount-text">${fmtMoney(inc.dailyAmt)}</span></div>
             <div class="d-flex justify-content-between mb-1"><span>회원권 등록금액</span><span class="fw-bold amount-text">${fmtMoney(inc.memberAmt)}</span></div>
             <hr class="my-1">
-            <div class="d-flex justify-content-between mb-1"><span>기본급</span><span>${fmtMoney(inc.baseSalary)}</span></div>
             <div class="d-flex justify-content-between mb-1"><span>인센티브</span><strong class="incentive-text">${fmtMoney(incOnly)}</strong></div>
             <div class="d-flex justify-content-between mb-1" style="color:#e17055;font-size:.8rem;"><span>소득공제 3.3%</span><span>− ${fmtMoney(inc.deduction)}</span></div>
             <div class="d-flex justify-content-between" style="background:#f0fff8;border-radius:8px;padding:6px 8px;margin-top:2px;">
@@ -2109,11 +2107,9 @@ function renderTeacherList() {
       <div class="card-body py-2" style="font-size:.83rem;">
         <div class="d-flex gap-2 mb-2" style="font-size:.75rem;color:#636e72;">
           <span>관리 ${inc.dailyRate}%</span><span>·</span>
-          <span>회원권 ${inc.memberRate}%</span><span>·</span>
-          <span>기본급 ${fmtMoney(inc.baseSalary)}</span>
+          <span>회원권 ${inc.memberRate}%</span>
         </div>
         <hr class="my-1">
-        <div class="d-flex justify-content-between mb-1"><span>기본급</span><span class="fw-bold">${fmtMoney(inc.baseSalary)}</span></div>
         <div class="d-flex justify-content-between mb-1">
           <span>관리 인센티브 <span style="font-size:.72rem;color:#636e72;">(${inc.dailyRate}%)</span></span>
           <strong class="incentive-text">${fmtMoney(inc.dailyInc)}</strong>
