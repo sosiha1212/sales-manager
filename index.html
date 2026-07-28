@@ -1532,6 +1532,8 @@ function fmtDT(iso)    { return iso ? iso.replace('T',' ').slice(0,16) : ''; }
 function txsForDate(sid, date) { return db.transactions.filter(t=>t.storeId===sid&&t.date===date); }
 function txsForMonth(sid,y,m)  { return db.transactions.filter(t=>t.storeId===sid&&t.date.startsWith(`${y}-${String(m).padStart(2,'0')}`)); }
 function sumAmount(txs)        { return txs.reduce((a,t)=>a+Number(t.actualAmount??t.amount??0)+Number(t.membershipRegActualAmount||0),0); }
+// 선생님은 본인 거래만, 원장은 전체 (각자것만 보기)
+function visibleTxs(txs)       { return (isManager() || !currentUser?.teacherId) ? txs : txs.filter(t => t.teacherId === currentUser.teacherId); }
 
 // 회원권 유형 판별
 const MEMBER_TYPES = ['new','existing'];
@@ -1569,7 +1571,7 @@ function calcTxIncentive(tx, teacher) {
 //  DAILY TAB
 // ════════════════════════════════════════════════
 function renderStatCards() {
-  const txs   = txsForDate(currentStoreId, currentDate);
+  const txs   = visibleTxs(txsForDate(currentStoreId, currentDate));
   const cash  = sumAmount(txs.filter(t=>t.paymentType==='cash'));
   const card  = sumAmount(txs.filter(t=>t.paymentType==='card'));
   const total = cash+card;
@@ -1705,7 +1707,7 @@ function renderTxTable() {
       th.style.cssText = 'font-size:.78rem;color:#636e72;';
       thead.prepend(th);
     }
-    const txs = txsForMonth(currentStoreId, y, m)
+    const txs = visibleTxs(txsForMonth(currentStoreId, y, m))
       .sort((a,b)=> a.date > b.date ? -1 : 1); // 최신순
     if (!txs.length) {
       tbody.innerHTML=`<tr><td colspan="11" class="empty-state"><i class="bi bi-inbox"></i><div>${y}년 ${m}월 거래 없음</div></td></tr>`;
@@ -1740,7 +1742,7 @@ function renderTxTable() {
     // thead 날짜 컬럼 제거
     const thDate = thead.querySelector('.th-date');
     if (thDate) thDate.remove();
-    const txs = txsForDate(currentStoreId, currentDate);
+    const txs = visibleTxs(txsForDate(currentStoreId, currentDate));
     if (!txs.length) {
       tbody.innerHTML=`<tr><td colspan="10" class="empty-state"><i class="bi bi-inbox"></i><div>거래 내역 없음</div></td></tr>`;
       return;
