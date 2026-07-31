@@ -16,14 +16,14 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 <style>
 :root {
-  --primary:#6c5ce7; --primary-light:#a29bfe;
+  --primary:#e66f34; --primary-light:#f2a377;
   --cash:#00b894; --card:#0984e3;
 }
 body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 
 /* ── LOGIN ── */
 #loginScreen {
-  position:fixed; inset:0; background:linear-gradient(135deg,#6c5ce7,#a29bfe);
+  position:fixed; inset:0; background:linear-gradient(135deg,#e66f34,#f2a377);
   display:flex; align-items:center; justify-content:center; z-index:9999;
 }
 .login-box {
@@ -35,13 +35,13 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 .pin-dot  { width:14px; height:14px; border-radius:50%; background:#dfe6e9; transition:.2s; }
 .pin-dot.filled { background:var(--primary); }
 .pin-pad  { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-.pin-btn  { padding:14px; border-radius:14px; border:none; background:#f0f0f8;
+.pin-btn  { padding:14px; border-radius:14px; border:none; background:#f7f1ec;
             font-size:1.2rem; font-weight:700; cursor:pointer; transition:.15s; }
 .pin-btn:hover { background:#dddaf8; }
 .pin-btn.del  { background:#fff0f0; color:#e17055; }
 
 /* ── NAVBAR ── */
-.navbar { background:linear-gradient(135deg,#6c5ce7,#a29bfe); }
+.navbar { background:linear-gradient(135deg,#e66f34,#f2a377); }
 .navbar-brand { font-weight:700; font-size:1.05rem; }
 .notif-bell { position:relative; cursor:pointer; }
 .notif-badge {
@@ -65,19 +65,19 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 .stat-card { border-radius:16px; border:none; box-shadow:0 2px 12px rgba(0,0,0,.07); }
 .stat-cash  { background:linear-gradient(135deg,#00b894,#55efc4); color:#fff; }
 .stat-card- { background:linear-gradient(135deg,#0984e3,#74b9ff); color:#fff; }
-.stat-total { background:linear-gradient(135deg,#6c5ce7,#a29bfe); color:#fff; }
+.stat-total { background:linear-gradient(135deg,#e66f34,#f2a377); color:#fff; }
 .stat-inc   { background:linear-gradient(135deg,#e17055,#fab1a0); color:#fff; }
 
 /* ── BADGES ── */
 .badge-new       { background:#fd79a8; color:#fff; }
-.badge-existing  { background:#6c5ce7; color:#fff; }
+.badge-existing  { background:#e66f34; color:#fff; }
 .badge-combeauty { background:#fdcb6e; color:#333; }
 .badge-onetime   { background:#b2bec3; color:#333; }
 .badge-cash       { background:#00b894; color:#fff; }
 .badge-card       { background:#0984e3; color:#fff; }
 .badge-check      { background:#00cec9; color:#fff; }
 .badge-miss       { background:#ff7675; color:#fff; }
-.badge-manager    { background:#6c5ce7; color:#fff; }
+.badge-manager    { background:#e66f34; color:#fff; }
 .badge-teacher    { background:#00b894; color:#fff; }
 .badge-membership { background:#00cec9; color:#fff; }
 .type-btn.active-membership { border-color:#00cec9; background:#00cec9; color:#fff; }
@@ -96,9 +96,9 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 .cal-day:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,.12); }
 .cal-day.today { border:2px solid var(--primary); }
 .cal-day.other-month { opacity:.35; pointer-events:none; }
-.cal-day.selected { background:linear-gradient(135deg,#6c5ce7,#a29bfe); color:#fff; }
+.cal-day.selected { background:linear-gradient(135deg,#e66f34,#f2a377); color:#fff; }
 .cal-day .day-num { font-size:.8rem; font-weight:700; }
-.cal-day .day-amount { font-size:.72rem; margin-top:3px; color:#6c5ce7; font-weight:700; }
+.cal-day .day-amount { font-size:.72rem; margin-top:3px; color:#e66f34; font-weight:700; }
 .cal-day.selected .day-amount { color:#fff; }
 .cal-day .day-dot { width:6px; height:6px; border-radius:50%; background:var(--primary); display:inline-block; margin-top:4px; }
 /* 매장별 매출 행 */
@@ -108,7 +108,7 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 .cal-vcat { display:inline-flex; align-items:center; gap:2px; font-size:.62rem; border-radius:8px; padding:1px 5px; font-weight:700; margin-top:1px; }
 
 /* ── MISC ── */
-.table-hover tbody tr:hover { background:#f0f0ff; }
+.table-hover tbody tr:hover { background:#fdf4ee; }
 .amount-text  { font-weight:700; color:#2d3436; }
 .incentive-text { color:#e17055; font-weight:600; }
 .growth-up   { color:#00b894; font-weight:700; }
@@ -117,14 +117,14 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 .form-label  { font-size:.85rem; font-weight:600; color:#2d3436; }
 .type-btn    { border-radius:20px; font-size:.8rem; padding:4px 14px; border:2px solid #dfe6e9; transition:.15s; }
 .type-btn.active-new       { border-color:#fd79a8; background:#fd79a8; color:#fff; }
-.type-btn.active-existing  { border-color:#6c5ce7; background:#6c5ce7; color:#fff; }
+.type-btn.active-existing  { border-color:#e66f34; background:#e66f34; color:#fff; }
 .type-btn.active-combeauty { border-color:#fdcb6e; background:#fdcb6e; color:#333; }
 .type-btn.active-onetime   { border-color:#b2bec3; background:#b2bec3; color:#333; }
 .section-title { font-size:1rem; font-weight:700; color:#2d3436; margin-bottom:12px; padding-bottom:6px; border-bottom:2px solid #f0f0f0; }
 .empty-state { text-align:center; padding:40px; color:#b2bec3; }
 .empty-state i { font-size:3rem; }
 .teacher-card { border-radius:14px; border:none; box-shadow:0 2px 10px rgba(0,0,0,.07); }
-.teacher-card .card-header { background:linear-gradient(135deg,#6c5ce7,#a29bfe); color:#fff; border-radius:14px 14px 0 0; }
+.teacher-card .card-header { background:linear-gradient(135deg,#e66f34,#f2a377); color:#fff; border-radius:14px 14px 0 0; }
 .table-wrap { overflow-x:auto; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.06); }
 .warn-row { background:#fff5f5 !important; }
 
@@ -172,14 +172,14 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 /* ── SUPPLY REQUEST ── */
 .req-요청중   { background:#fdcb6e; color:#333; }
 .req-승인     { background:#74b9ff; color:#fff; }
-.req-주문완료 { background:#a29bfe; color:#fff; }
+.req-주문완료 { background:#f2a377; color:#fff; }
 .req-수령완료 { background:#00b894; color:#fff; }
 
 /* ── FIXED COSTS ── */
 .cost-cat-chip { border-radius:10px; padding:8px 14px; font-size:.82rem; font-weight:700; text-align:center; }
 .cost-row-임대료  { border-left:4px solid #e17055; }
 .cost-row-관리비  { border-left:4px solid #636e72; }
-.cost-row-인건비  { border-left:4px solid #6c5ce7; }
+.cost-row-인건비  { border-left:4px solid #e66f34; }
 .cost-row-화장품  { border-left:4px solid #fd79a8; }
 .cost-row-소모품  { border-left:4px solid #fdcb6e; }
 .cost-row-특이비용{ border-left:4px solid #e17055; }
@@ -189,24 +189,24 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 
 /* ── VISIT LOG ── */
 .vcat-new          { background:#fd79a8; color:#fff; }
-.vcat-existing_cam { background:#6c5ce7; color:#fff; }
+.vcat-existing_cam { background:#e66f34; color:#fff; }
 .vcat-existing_sin { background:#00b894; color:#fff; }
 .vcat-onetime      { background:#fdcb6e; color:#333; }
 .visit-row { transition:.15s; }
 /* ── MONTHLY CUSTOMER LIST ── */
-.mcl-store-header { background:linear-gradient(135deg,#6c5ce7,#a29bfe); color:#fff; padding:8px 14px; border-radius:10px 10px 0 0; font-weight:700; font-size:.88rem; }
-.mcl-teacher-header { background:#f0f0ff; padding:5px 12px; font-weight:700; font-size:.82rem; color:#6c5ce7; border-bottom:2px solid #e0d8ff; }
+.mcl-store-header { background:linear-gradient(135deg,#e66f34,#f2a377); color:#fff; padding:8px 14px; border-radius:10px 10px 0 0; font-weight:700; font-size:.88rem; }
+.mcl-teacher-header { background:#fdf4ee; padding:5px 12px; font-weight:700; font-size:.82rem; color:#e66f34; border-bottom:2px solid #f7dfd0; }
 .mcl-name-new          { color:#d63170; font-weight:700; }
 .mcl-name-existing_cam { color:#5a4fcf; font-weight:700; }
 .mcl-name-existing_sin { color:#00916e; font-weight:700; }
 .mcl-name-onetime      { color:#b7860b; font-weight:600; }
 .visit-row:hover { background:#f8f0ff !important; }
 .vborder-new          { border-left:4px solid #fd79a8 !important; }
-.vborder-existing_cam { border-left:4px solid #6c5ce7 !important; }
+.vborder-existing_cam { border-left:4px solid #e66f34 !important; }
 .vborder-existing_sin { border-left:4px solid #00b894 !important; }
 .vborder-onetime      { border-left:4px solid #fdcb6e !important; }
 .teacher-tab-btn {
-  border:2px solid #e0d8ff; border-radius:20px; padding:5px 16px;
+  border:2px solid #f7dfd0; border-radius:20px; padding:5px 16px;
   font-size:.82rem; font-weight:600; background:#fff; cursor:pointer; transition:.15s;
 }
 .teacher-tab-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
@@ -383,7 +383,7 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
         <!-- 범례 -->
         <div class="d-flex flex-wrap gap-2">
           <span class="cat-legend"><span class="legend-dot" style="background:#fd79a8;"></span>신규</span>
-          <span class="cat-legend"><span class="legend-dot" style="background:#6c5ce7;"></span>기존(캄)</span>
+          <span class="cat-legend"><span class="legend-dot" style="background:#e66f34;"></span>기존(캄)</span>
           <span class="cat-legend"><span class="legend-dot" style="background:#00b894;"></span>기존(신)</span>
           <span class="cat-legend"><span class="legend-dot" style="background:#fdcb6e;"></span>일회성</span>
         </div>
@@ -488,7 +488,7 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
     <!-- 방문 구분 범례 -->
     <div class="d-flex gap-2 mb-3" style="font-size:.72rem;">
       <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#fd79a8;margin-right:3px;"></span>신규</span>
-      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#6c5ce7;margin-right:3px;"></span>기존</span>
+      <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e66f34;margin-right:3px;"></span>기존</span>
       <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#fdcb6e;margin-right:3px;"></span>일회성</span>
     </div>
     <div id="calDayDetail" style="display:none;">
@@ -564,7 +564,7 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
           <!-- 구분 범례 -->
           <div class="d-flex gap-2" style="font-size:.72rem;">
             <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#fd79a8;margin-right:2px;"></span>신규</span>
-            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#6c5ce7;margin-right:2px;"></span>기존(캄)</span>
+            <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#e66f34;margin-right:2px;"></span>기존(캄)</span>
             <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#00b894;margin-right:2px;"></span>기존(신)</span>
             <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#fdcb6e;margin-right:2px;"></span>일회성</span>
           </div>
@@ -726,7 +726,7 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
       <!-- ── 관리 금액 ── -->
       <div class="col-12">
         <div style="background:#f8f6ff;border-radius:12px;padding:10px 12px;border:1px solid #e8e2ff;">
-          <div class="fw-bold mb-2" style="font-size:.78rem;color:#6c5ce7;">📋 관리 금액</div>
+          <div class="fw-bold mb-2" style="font-size:.78rem;color:#e66f34;">📋 관리 금액</div>
           <div class="row g-2">
             <div class="col-7">
               <label class="form-label">금액 (원)</label>
@@ -870,7 +870,7 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
       <div class="col-6"><label class="form-label">소속 매장</label><select class="form-select form-select-sm" id="teacherStore"></select></div>
       <!-- 인센티브 구조 (원장만 설정·열람) -->
       <div class="col-12 mt-1">
-        <div style="font-size:.78rem;font-weight:700;color:#6c5ce7;padding:6px 10px;background:#f0eeff;border-radius:8px;margin-bottom:8px;">
+        <div style="font-size:.78rem;font-weight:700;color:#e66f34;padding:6px 10px;background:#f0eeff;border-radius:8px;margin-bottom:8px;">
           🔒 인센티브 설정 (원장 전용 — 선생님에게 비공개)
         </div>
       </div>
@@ -1319,7 +1319,7 @@ function showUserList() {
   document.getElementById('loginUserList').style.display = '';
   document.getElementById('loginSubtitle').textContent = '사용자를 선택하세요';
   document.getElementById('loginUserList').innerHTML = db.users.map(u => `
-    <button class="btn w-100 mb-2 fw-semibold" style="border-radius:12px;border:2px solid #e0d8ff;background:#fff;" onclick="selectLoginUser('${u.id}')">
+    <button class="btn w-100 mb-2 fw-semibold" style="border-radius:12px;border:2px solid #f7dfd0;background:#fff;" onclick="selectLoginUser('${u.id}')">
       <span class="badge badge-${u.role} me-2">${u.role==='manager'?'원장':'선생님'}</span>${u.username}
     </button>`).join('');
 }
@@ -1719,8 +1719,8 @@ function renderTxTable() {
       if(tx.date !== lastDate){
         const dayTxs = txs.filter(t=>t.date===tx.date);
         const dayAmt = sumAmount(dayTxs);
-        html+=`<tr style="background:#f0f0ff;">
-          <td colspan="11" style="font-size:.78rem;font-weight:700;color:#6c5ce7;padding:6px 12px;">
+        html+=`<tr style="background:#fdf4ee;">
+          <td colspan="11" style="font-size:.78rem;font-weight:700;color:#e66f34;padding:6px 12px;">
             📅 ${tx.date} <span style="font-weight:400;color:#636e72;">${dayTxs.length}건 · ${fmtMoney(dayAmt)}</span>
           </td></tr>`;
         lastDate=tx.date;
@@ -1729,9 +1729,9 @@ function renderTxTable() {
     });
     // 월 합계
     const totalAmt = sumAmount(txs);
-    html+=`<tr style="background:#e8e4ff;font-weight:700;">
-      <td colspan="5" style="padding:8px 12px;color:#6c5ce7;">💰 ${y}년 ${m}월 합계 ${txs.length}건</td>
-      <td colspan="6" style="color:#6c5ce7;font-size:.95rem;">${fmtMoney(totalAmt)}</td>
+    html+=`<tr style="background:#fbede3;font-weight:700;">
+      <td colspan="5" style="padding:8px 12px;color:#e66f34;">💰 ${y}년 ${m}월 합계 ${txs.length}건</td>
+      <td colspan="6" style="color:#e66f34;font-size:.95rem;">${fmtMoney(totalAmt)}</td>
     </tr>`;
     tbody.innerHTML = html;
   } else {
@@ -2308,7 +2308,7 @@ function renderMonthlyStats(y,m){
 }
 
 // 매장별 색상 팔레트
-const STORE_COLORS = ['#6c5ce7','#00b894','#e17055','#0984e3','#fd79a8','#fdcb6e','#00cec9','#a29bfe'];
+const STORE_COLORS = ['#e66f34','#00b894','#e17055','#0984e3','#fd79a8','#fdcb6e','#00cec9','#f2a377'];
 function storeColor(idx){ return STORE_COLORS[idx % STORE_COLORS.length]; }
 
 function renderCalendar(y,m){
@@ -2350,7 +2350,7 @@ function renderCalendar(y,m){
     const vcatHtml = (cntNew||cntExist||cntOne)
       ? `<div class="d-flex flex-wrap gap-1 mt-1">
           ${cntNew   ?`<span class="cal-vcat" style="background:#fd79a8;color:#fff;">신${cntNew}</span>`:''}
-          ${cntExist ?`<span class="cal-vcat" style="background:#6c5ce7;color:#fff;">기${cntExist}</span>`:''}
+          ${cntExist ?`<span class="cal-vcat" style="background:#e66f34;color:#fff;">기${cntExist}</span>`:''}
           ${cntOne   ?`<span class="cal-vcat" style="background:#fdcb6e;color:#333;">일${cntOne}</span>`:''}
         </div>` : '';
 
@@ -2541,7 +2541,7 @@ function renderTeacherSalesChart(y, m) {
 
   const labels   = teachers.map(te=>te.name);
   const sales    = teachers.map(te=>sumAmount(txs.filter(t=>t.teacherId===te.id)));
-  const palette  = ['#6c5ce7','#fd79a8','#00b894','#fdcb6e','#0984e3','#e17055','#a29bfe','#55efc4'];
+  const palette  = ['#e66f34','#fd79a8','#00b894','#fdcb6e','#0984e3','#e17055','#f2a377','#55efc4'];
 
   _teacherSalesChart = new Chart(ctx, {
     type: 'bar',
@@ -2985,7 +2985,7 @@ function confirmExcelImport(){
 // ════════════════════════════════════════════════
 const INV_CATS = ['전체','스킨케어','메이크업','헤어','바디','도구','소모품','기타'];
 const INV_CAT_COLORS = {
-  스킨케어:'#fd79a8', 메이크업:'#a29bfe', 헤어:'#fdcb6e',
+  스킨케어:'#fd79a8', 메이크업:'#f2a377', 헤어:'#fdcb6e',
   바디:'#55efc4', 도구:'#74b9ff', 소모품:'#e17055', 기타:'#b2bec3'
 };
 let _invFilter = '전체';
@@ -3334,7 +3334,7 @@ function pushSupplyReqNotif(r) {
 const COST_CATS = [
   { key:'임대료',   icon:'🏠', color:'#e17055' },
   { key:'관리비',   icon:'🏢', color:'#636e72' },
-  { key:'인건비',   icon:'👥', color:'#6c5ce7' },
+  { key:'인건비',   icon:'👥', color:'#e66f34' },
   { key:'화장품',   icon:'💄', color:'#fd79a8' },
   { key:'소모품',   icon:'🧴', color:'#fdcb6e' },
   { key:'특이비용', icon:'⚠️', color:'#e17055' },
@@ -3610,7 +3610,7 @@ function renderMonthlyVisitStats(y, m) {
 
     html += `
     <div class="mb-4">
-      <div style="font-size:.82rem;font-weight:700;color:#6c5ce7;margin-bottom:6px;">
+      <div style="font-size:.82rem;font-weight:700;color:#e66f34;margin-bottom:6px;">
         <i class="bi bi-building me-1"></i>${store.name}
         <span style="font-weight:400;color:#636e72;margin-left:8px;">방문 ${storeVisit}명 ${storeDiffBadge} / 매출 ${fmtMoney(storeSales)}</span>
       </div>
@@ -3622,7 +3622,7 @@ function renderMonthlyVisitStats(y, m) {
               <th>총 방문</th>
               <th style="font-size:.72rem;color:#636e72;">전달 대비</th>
               ${catKeys.map(k=>`<th><span class="badge rounded-pill" style="background:${VCAT[k].color};color:${VCAT[k].text};font-size:.7rem;">${VCAT[k].label}</span></th>`).join('')}
-              <th style="color:#6c5ce7;">매출</th>
+              <th style="color:#e66f34;">매출</th>
             </tr>
           </thead>
           <tbody>
@@ -3635,7 +3635,7 @@ function renderMonthlyVisitStats(y, m) {
                 <td><strong style="color:var(--primary);">${logs.length}</strong></td>
                 <td>${diffBadge}</td>
                 ${catCells}
-                <td class="fw-bold" style="color:#6c5ce7;">${fmtMoney(sales)}</td>
+                <td class="fw-bold" style="color:#e66f34;">${fmtMoney(sales)}</td>
               </tr>`;
             }).join('')}
             <tr style="background:#f8f9fc;font-weight:700;">
@@ -3643,7 +3643,7 @@ function renderMonthlyVisitStats(y, m) {
               <td style="color:var(--primary);">${storeVisit}</td>
               <td>${storeDiffBadge}</td>
               ${catKeys.map(k=>`<td>${rows.reduce((s,r)=>s+r.logs.filter(v=>v.cat===k).length,0)}</td>`).join('')}
-              <td style="color:#6c5ce7;">${fmtMoney(storeSales)}</td>
+              <td style="color:#e66f34;">${fmtMoney(storeSales)}</td>
             </tr>
           </tbody>
         </table>
@@ -3746,7 +3746,7 @@ function renderMonthlyCustomerList(y, m) {
       // 소계 셀
       const countCells = allDates.map(d => {
         const n = (byDate[d] || []).length;
-        return `<td style="text-align:center;font-size:.72rem;font-weight:700;padding:3px;color:${n?'#6c5ce7':'#dfe6e9'};">${n||''}</td>`;
+        return `<td style="text-align:center;font-size:.72rem;font-weight:700;padding:3px;color:${n?'#e66f34':'#dfe6e9'};">${n||''}</td>`;
       }).join('');
 
       const catCounts = Object.keys(VCAT).map(k => {
@@ -3772,12 +3772,12 @@ function renderMonthlyCustomerList(y, m) {
               <tr style="border-bottom:1px solid #f0f0f0;">
                 <td style="padding:4px 8px;font-weight:600;color:#636e72;font-size:.72rem;white-space:nowrap;">고객명</td>
                 ${dateCells}
-                <td style="text-align:center;font-weight:800;color:#6c5ce7;padding:4px;">${logs.length}</td>
+                <td style="text-align:center;font-weight:800;color:#e66f34;padding:4px;">${logs.length}</td>
               </tr>
               <tr style="background:#f8f9ff;">
                 <td style="padding:3px 8px;font-size:.68rem;color:#b2bec3;">일별 수</td>
                 ${countCells}
-                <td style="text-align:center;font-weight:700;font-size:.78rem;color:#6c5ce7;">${logs.length}</td>
+                <td style="text-align:center;font-weight:700;font-size:.78rem;color:#e66f34;">${logs.length}</td>
               </tr>
             </tbody>
           </table>
@@ -3835,7 +3835,7 @@ function exportMonthlyCustomerListExcel() {
 // ════════════════════════════════════════════════
 const VCAT = {
   new:          { label: '신규',       color: '#fd79a8', text: '#fff', borderCls: 'vborder-new'          },
-  existing_cam: { label: '기존(캄)',   color: '#6c5ce7', text: '#fff', borderCls: 'vborder-existing_cam' },
+  existing_cam: { label: '기존(캄)',   color: '#e66f34', text: '#fff', borderCls: 'vborder-existing_cam' },
   existing_sin: { label: '기존(신)',   color: '#00b894', text: '#fff', borderCls: 'vborder-existing_sin' },
   onetime:      { label: '일회성',     color: '#fdcb6e', text: '#333', borderCls: 'vborder-onetime'      },
 };
@@ -3999,7 +3999,7 @@ function renderVisitTable() {
   tbody.innerHTML = logs.map((v, i) => {
     const c = VCAT[v.cat] || VCAT.new;
     const canDel = mgr || (currentUser?.teacherId === v.teacherId);
-    const autoTag = v.autoAdded ? `<span style="font-size:.68rem;color:#a29bfe;margin-left:4px;">거래연동</span>` : '';
+    const autoTag = v.autoAdded ? `<span style="font-size:.68rem;color:#f2a377;margin-left:4px;">거래연동</span>` : '';
     return `<tr class="visit-row ${c.borderCls}" style="background:#fff;">
       <td style="color:#b2bec3;font-size:.78rem;">${i + 1}</td>
       <td><strong>${v.name}</strong>${autoTag}</td>
