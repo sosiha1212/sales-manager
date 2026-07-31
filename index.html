@@ -1215,12 +1215,13 @@ async function _syncToSupabase(dbData) {
 
 // 앱 시작 시 Supabase에서 최신 데이터 로드
 async function _loadFromSupabase() {
-  if (!_supa) return null;
+  if (!_supa) return { ok:false };
   try {
-    const { data, error } = await _supa.from('app_data').select('data').eq('id','main').single();
-    if (error || !data) return null;
-    return data.data;
-  } catch(e) { return null; }
+    const { data, error } = await _supa.from('app_data').select('data').eq('id','main');
+    if (error) return { ok:false };                          // 통신/권한 오류 → 서버 안 건드림
+    if (!data || data.length === 0) return { ok:true, empty:true }; // 서버가 확실히 비어있음
+    return { ok:true, data: data[0].data };
+  } catch(e) { return { ok:false }; }
 }
 
 // 동기화 상태 표시
@@ -1239,7 +1240,7 @@ if (!db.users) {
   if (old) {
     const o = JSON.parse(old);
     db = { ...db, stores: o.stores||[], teachers: o.teachers||[], customers: o.customers||[], transactions: o.transactions||[] };
-    saveDB(db);
+    localStorage.setItem(DB_KEY, JSON.stringify(db)); // 로컬만 (서버 push 금지 — 로딩 중 덮어쓰기 방지)
   }
 }
 if (!db.notifications)   db.notifications   = [];
@@ -1257,7 +1258,7 @@ if (!db.fixedCosts)      db.fixedCosts      = [];
   if (t.dailySalesRate == null) t.dailySalesRate = t.incentiveRate ?? 0;
   if (t.membershipRate  == null) t.membershipRate  = 0; // 회원권은 0으로 초기화 (별도 설정 필요)
 });
-saveDB(db);
+localStorage.setItem(DB_KEY, JSON.stringify(db)); // 로컬만 (서버 push 금지 — 로딩 중 덮어쓰기 방지)
 
 // ── Password hash (simple, for local use) ──────────
 function hashPin(pin) {
@@ -1426,18 +1427,21 @@ window.addEventListener('DOMContentLoaded', async () => {
   const syncEl = document.getElementById('syncStatus');
   if (syncEl) { syncEl.textContent = '☁️ 불러오는 중...'; syncEl.style.color = '#b2bec3'; }
 
-  const supaData = await _loadFromSupabase();
-  if (supaData) {
-    // 서버(Supabase)를 항상 최종본으로 사용한다.
-    // 로컬은 캐시일 뿐 → 오래된 데이터가 남아있는 기기가 서버를 덮어쓰지 못하게 함.
-    for (const k of Object.keys(db)) { if (!(k in supaData)) delete db[k]; }
-    Object.assign(db, supaData);
+  const res = await _loadFromSupabase();
+  if (res.ok && res.data) {
+    // 서버(Supabase)를 항상 최종본으로 사용한다. 로컬은 캐시일 뿐.
+    // → 오래된 데이터가 남아있는 기기가 서버를 덮어쓰지 못하게 함.
+    for (const k of Object.keys(db)) { if (!(k in res.data)) delete db[k]; }
+    Object.assign(db, res.data);
     localStorage.setItem(DB_KEY, JSON.stringify(db));
     if (syncEl) { syncEl.textContent = '☁️ 동기화됨'; syncEl.style.color = '#00b894'; }
-  } else {
-    // 서버가 완전히 비어있을 때만(최초 1회) 로컬 데이터로 서버를 시드
+  } else if (res.ok && res.empty) {
+    // 서버가 확실히 비어있을 때만(최초 1회) 로컬 데이터로 서버를 시드
     _syncToSupabase(db);
-    if (syncEl) { syncEl.textContent = '☁️ 로컬 데이터 사용 중'; syncEl.style.color = '#fdcb6e'; }
+    if (syncEl) { syncEl.textContent = '☁️ 동기화됨'; syncEl.style.color = '#00b894'; }
+  } else {
+    // 통신 오류 → 서버를 절대 건드리지 않고 로컬 캐시만 사용 (덮어쓰기 금지)
+    if (syncEl) { syncEl.textContent = '⚠️ 오프라인(로컬)'; syncEl.style.color = '#fdcb6e'; }
   }
 
   // try resume session
@@ -1458,7 +1462,7 @@ function cleanOrphanVisitLogs() {
     if (!v.txId) return true;       // txId 없는 순수 수동 항목은 유지
     return txIds.has(v.txId);       // txId가 있으면 거래가 존재해야 유지
   });
-  if (db.visitLogs.length !== before) saveDB(db);
+  if (db.visitLogs.length !== before) localStorage.setItem(DB_KEY, JSON.stringify(db)); // 로컬만 (자동 정리는 서버 push 안 함)
 }
 
 function renderAll() {
