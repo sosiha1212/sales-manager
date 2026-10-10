@@ -86,6 +86,11 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
 .tax-btn.vat-active  { border-color:#e17055; background:#e17055; color:#fff; }
 .tax-btn.cash-active { border-color:#0984e3; background:#0984e3; color:#fff; }
 .actual-amt-box { background:#f0fff8; border:1px solid #b2f5e6; border-radius:10px; padding:6px 12px; font-size:.82rem; font-weight:700; color:#00b894; margin-top:4px; }
+.split-box { background:#fffaf6; border:1px solid #ffd9c2; border-radius:10px; padding:8px 10px; margin-top:4px; }
+.split-msg { font-size:.76rem; font-weight:700; }
+.split-ok   { color:#00b894; }
+.split-bad  { color:#e17055; }
+.badge-split { background:#e56c2d; color:#fff; }
 .disc-line { text-decoration:line-through; color:#b2bec3; font-size:.78rem; font-weight:400; }
 
 /* ── CALENDAR ── */
@@ -746,7 +751,24 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
             </div>
             <div class="col-12">
               <label class="form-label">결제 수단</label>
-              <select class="form-select form-select-sm" id="txPayment"><option value="card">카드</option><option value="cash">현금</option></select>
+              <select class="form-select form-select-sm" id="txPayment" onchange="onPayTypeChange()">
+                <option value="card">카드</option>
+                <option value="cash">현금</option>
+                <option value="split">카드 + 현금 (나눠서 결제)</option>
+              </select>
+            </div>
+            <div class="col-12 split-box" id="txPaySplitBox" style="display:none;">
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label">💳 카드 금액</label>
+                  <input type="text" inputmode="numeric" class="form-control form-control-sm" id="txPayCard" placeholder="0" oninput="fmtAmountInput(this);calcPaySplit()">
+                </div>
+                <div class="col-6">
+                  <label class="form-label">💵 현금 금액</label>
+                  <input type="text" inputmode="numeric" class="form-control form-control-sm" id="txPayCash" placeholder="0" oninput="fmtAmountInput(this);calcPaySplit()">
+                </div>
+                <div class="col-12"><div id="txPaySplitMsg" class="split-msg"></div></div>
+              </div>
             </div>
           </div>
         </div>
@@ -761,22 +783,44 @@ body { background:#f8f9fc; font-family:'Apple SD Gothic Neo',sans-serif; }
               <input type="text" inputmode="numeric" class="form-control form-control-sm" id="txRegAmount" placeholder="300,000" oninput="fmtAmountInput(this);calcTxRegActual()">
             </div>
             <div class="col-3">
-              <label class="form-label">할인 (%)</label>
+              <label class="form-label">고객 <b>할인</b> (%)</label>
               <div class="input-group input-group-sm">
                 <input type="number" class="form-control form-control-sm" id="txRegDiscount" placeholder="0" min="0" max="100" step="0.1" oninput="calcTxRegActual()">
                 <span class="input-group-text px-1">%</span>
               </div>
             </div>
             <div class="col-4 d-flex align-items-end pb-1">
-              <span style="font-size:.72rem;color:#00b894;font-weight:600;">회원권 인센티브 적용</span>
+              <span style="font-size:.7rem;color:#636e72;font-weight:400;line-height:1.35;">
+                깎아주는 비율입니다.<br>선생님 인센티브 비율은<br><b>선생님 관리</b>에서 설정하세요.
+              </span>
+            </div>
+            <div class="col-12" id="txRegDiscountWarn" style="display:none;">
+              <div style="font-size:.74rem;color:#e17055;background:#fff5f2;border:1px solid #ffd9cc;border-radius:8px;padding:6px 9px;">
+                ⚠️ 할인 <b><span id="txRegDiscountVal"></span>%</b> — 고객에게 깎아주는 금액입니다.
+                선생님 인센티브를 넣으려던 거라면 이 칸을 <b>0</b>으로 되돌리고 <b>선생님 관리</b> 탭에서 설정하세요.
+              </div>
             </div>
             <!-- 결제 수단 -->
             <div class="col-12">
               <label class="form-label">결제 수단</label>
-              <select class="form-select form-select-sm" id="txRegPayment">
+              <select class="form-select form-select-sm" id="txRegPayment" onchange="onRegPayTypeChange()">
                 <option value="card">카드</option>
                 <option value="cash">현금</option>
+                <option value="split">카드 + 현금 (나눠서 결제)</option>
               </select>
+            </div>
+            <div class="col-12 split-box" id="txRegPaySplitBox" style="display:none;">
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label">💳 카드 금액</label>
+                  <input type="text" inputmode="numeric" class="form-control form-control-sm" id="txRegPayCard" placeholder="0" oninput="fmtAmountInput(this);calcRegPaySplit()">
+                </div>
+                <div class="col-6">
+                  <label class="form-label">💵 현금 금액</label>
+                  <input type="text" inputmode="numeric" class="form-control form-control-sm" id="txRegPayCash" placeholder="0" oninput="fmtAmountInput(this);calcRegPaySplit()">
+                </div>
+                <div class="col-12"><div id="txRegPaySplitMsg" class="split-msg"></div></div>
+              </div>
             </div>
             <!-- 세금 탭 -->
             <div class="col-12">
@@ -1207,10 +1251,23 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 
 // Supabase 비동기 저장
 async function _syncToSupabase(dbData) {
-  if (!_supa) return;
+  if (!_supa) {
+    _showSyncStatus('⚠️ 저장 안 됨 — 서버 연결 없음', '#e17055');
+    return;
+  }
   try {
-    await _supa.from('app_data').upsert({ id: 'main', data: dbData, updated_at: new Date().toISOString() });
-  } catch(e) { console.warn('Supabase 동기화 실패:', e); }
+    const { error } = await _supa.from('app_data')
+      .upsert({ id: 'main', data: dbData, updated_at: new Date().toISOString() });
+    if (error) {                       // supabase-js는 실패해도 throw 하지 않음
+      console.warn('Supabase 동기화 실패:', error);
+      _showSyncStatus('⚠️ 저장 안 됨 — 새로고침하면 사라집니다', '#e17055');
+      return;
+    }
+    _showSyncStatus('☁️ 저장됨', '#00b894');
+  } catch(e) {
+    console.warn('Supabase 동기화 실패:', e);
+    _showSyncStatus('⚠️ 저장 안 됨 — 인터넷 확인', '#e17055');
+  }
 }
 
 // 앱 시작 시 Supabase에서 최신 데이터 로드
@@ -1417,7 +1474,9 @@ let _txViewMode    = 'day';   // 'day' | 'month'
 let _txViewMonth   = new Date();
 
 function todayStr() {
-  return new Date().toISOString().slice(0,10);
+  // toISOString()은 UTC 기준이라 한국 새벽(00~09시)에 전날로 밀린다 → 로컬 기준으로 계산
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -1515,6 +1574,7 @@ function populateStoreSelect() {
 }
 function onStoreChange() { currentStoreId = document.getElementById('storeSelect').value; renderAll(); }
 function onDateChange()  { currentDate = document.getElementById('dateSelect').value; renderAll(); }
+function jumpToDate(d)   { currentDate = d; document.getElementById('dateSelect').value = d; renderAll(); }
 
 // ════════════════════════════════════════════════
 //  HELPERS
@@ -1523,7 +1583,10 @@ const TYPE_LABELS = { new:'신규', existing:'기존 회원권', combeauty:'캄�
 const TYPE_BADGE  = { new:'badge-new', existing:'badge-existing', combeauty:'badge-combeauty', onetime:'badge-onetime' };
 
 function typeBadge(t)  { return `<span class="badge rounded-pill ${TYPE_BADGE[t]||'bg-secondary'}" style="font-size:.72rem;">${TYPE_LABELS[t]||t}</span>`; }
-function payBadge(p)   { return p==='cash'?'<span class="badge badge-cash rounded-pill" style="font-size:.72rem;">현금</span>':'<span class="badge badge-card rounded-pill" style="font-size:.72rem;">카드</span>'; }
+function payBadge(p)   {
+  if (p==='split') return '<span class="badge badge-split rounded-pill" style="font-size:.72rem;">카드+현금</span>';
+  return p==='cash'?'<span class="badge badge-cash rounded-pill" style="font-size:.72rem;">현금</span>':'<span class="badge badge-card rounded-pill" style="font-size:.72rem;">카드</span>';
+}
 function checkBadge(v) { return v?'<span class="badge badge-check rounded-pill" style="font-size:.72rem;">완료</span>':'<span class="badge badge-miss rounded-pill" style="font-size:.72rem;">미완료</span>'; }
 function fmtMoney(n)   { return Number(n||0).toLocaleString()+'원'; }
 function fmtDT(iso)    { return iso ? iso.replace('T',' ').slice(0,16) : ''; }
@@ -1570,9 +1633,9 @@ function calcTxIncentive(tx, teacher) {
 //  DAILY TAB
 // ════════════════════════════════════════════════
 function renderStatCards() {
-  const txs   = visibleTxs(txsForDate(currentStoreId, currentDate));
-  const cash  = sumAmount(txs.filter(t=>t.paymentType==='cash'));
-  const card  = sumAmount(txs.filter(t=>t.paymentType==='card'));
+  const txs = visibleTxs(txsForDate(currentStoreId, currentDate));
+  // 관리금액·회원권은 결제수단이 서로 다를 수 있고 카드+현금 분할도 가능하다
+  const { cash, card } = sumCashCard(txs);
   const total = cash+card;
   document.getElementById('statCards').innerHTML = `
     <div class="col-6 col-md-4"><div class="card stat-card stat-cash p-3">
@@ -1743,7 +1806,16 @@ function renderTxTable() {
     if (thDate) thDate.remove();
     const txs = visibleTxs(txsForDate(currentStoreId, currentDate));
     if (!txs.length) {
-      tbody.innerHTML=`<tr><td colspan="10" class="empty-state"><i class="bi bi-inbox"></i><div>거래 내역 없음</div></td></tr>`;
+      // 이 날짜엔 없지만 같은 달 다른 날짜에 거래가 있으면 알려준다
+      const [yy, mm] = currentDate.split('-');
+      const monthTxs = visibleTxs(txsForMonth(currentStoreId, Number(yy), Number(mm)));
+      const days = [...new Set(monthTxs.map(t => t.date))].sort();
+      const hint = days.length
+        ? `<div style="font-size:.8rem;color:#e17055;margin-top:6px;">
+             이 달에 거래 ${monthTxs.length}건이 <b>다른 날짜</b>에 있습니다 —
+             ${days.map(d=>`<a href="#" onclick="jumpToDate('${d}');return false;" style="color:#e56c2d;font-weight:700;">${d.slice(5).replace('-','/')}</a>`).join(', ')}
+           </div>` : '';
+      tbody.innerHTML=`<tr><td colspan="10" class="empty-state"><i class="bi bi-inbox"></i><div>거래 내역 없음</div>${hint}</td></tr>`;
       return;
     }
     tbody.innerHTML = txs.map(tx => buildTxRow(tx, mgr, false)).join('');
@@ -1843,6 +1915,8 @@ function openTxModal(txId) {
     document.getElementById('txRegAmount').value     = tx.membershipRegAmount ? Number(tx.membershipRegAmount).toLocaleString('ko-KR') : '';
     document.getElementById('txRegDiscount').value   = tx.membershipRegDiscount||0;
     document.getElementById('txPayment').value       = tx.paymentType;
+    document.getElementById('txPayCard').value       = tx.payCard ? Number(tx.payCard).toLocaleString('ko-KR') : '';
+    document.getElementById('txPayCash').value       = tx.payCash ? Number(tx.payCash).toLocaleString('ko-KR') : '';
     document.getElementById('txContract').checked    = tx.contractSigned;
     document.getElementById('txPrivacy').checked     = tx.privacyAgreed;
     document.getElementById('txNote').value          = tx.note||'';
@@ -1850,6 +1924,8 @@ function openTxModal(txId) {
     _setTxReferral(tx.referral||'인스타그램');
     _setTxTaxBtn(tx.membershipRegTaxType||'none');
     document.getElementById('txRegPayment').value = tx.membershipRegPayment||'card';
+    document.getElementById('txRegPayCard').value = tx.membershipRegPayCard ? Number(tx.membershipRegPayCard).toLocaleString('ko-KR') : '';
+    document.getElementById('txRegPayCash').value = tx.membershipRegPayCash ? Number(tx.membershipRegPayCash).toLocaleString('ko-KR') : '';
     calcTxActual(); calcTxRegActual();
     setTxTypeById(tx.customerType);
     populateStoreInModal('txStore');
@@ -1864,12 +1940,16 @@ function openTxModal(txId) {
     document.getElementById('txRegAmount').value     = '';
     document.getElementById('txRegDiscount').value   = '';
     document.getElementById('txPayment').value       = 'card';
+    document.getElementById('txPayCard').value       = '';
+    document.getElementById('txPayCash').value       = '';
     document.getElementById('txContract').checked    = false;
     document.getElementById('txPrivacy').checked     = false;
     document.getElementById('txNote').value          = '';
     _setTxReferral('인스타그램');
     _setTxTaxBtn('none');
     document.getElementById('txRegPayment').value = 'card';
+    document.getElementById('txRegPayCard').value = '';
+    document.getElementById('txRegPayCash').value = '';
     setTxTypeById('new');
     populateStoreInModal('txStore');
     populateTeachers('txTeacher','txStore');
@@ -1880,6 +1960,8 @@ function openTxModal(txId) {
       document.getElementById('txTeacher').disabled = true;
     }
   }
+  onPayTypeChange();        // 분할결제 입력칸 표시 여부 동기화
+  onRegPayTypeChange();
   modal.show();
 }
 function editTx(id) { openTxModal(id); }
@@ -1943,10 +2025,90 @@ function fmtAmountInput(el) {
   el.value  = raw ? Number(raw).toLocaleString('ko-KR') : '';
 }
 
+// ── 카드+현금 분할 결제 ──────────────────────────────────
+function _rawVal(id) {
+  const el = document.getElementById(id);
+  return el ? (Number((el.value||'').replace(/,/g,''))||0) : 0;
+}
+
+// 관리금액에서 고객이 실제로 내는 금액 (할인 후)
+function svcPayTotal() {
+  const amt  = getRawAmount();
+  const disc = Number(document.getElementById('txDiscount').value||0);
+  return disc > 0 ? Math.round(amt * (1 - disc/100)) : amt;
+}
+// 회원권에서 고객이 실제로 내는 금액 (할인 후, 세금 포함)
+function regPayTotal() {
+  const amt  = _rawVal('txRegAmount');
+  const disc = Number(document.getElementById('txRegDiscount').value||0);
+  const base = disc > 0 ? Math.round(amt * (1 - disc/100)) : amt;
+  return (_txTaxType === 'vat' || _txTaxType === 'cash') ? Math.round(base * 1.1) : base;
+}
+
+// 입력한 카드/현금 합계가 결제 총액과 맞는지 표시
+function _renderSplitMsg(msgId, cardId, cashId, target) {
+  const el = document.getElementById(msgId);
+  if (!el) return;
+  const sum  = _rawVal(cardId) + _rawVal(cashId);
+  const diff = target - sum;
+  if (target <= 0) { el.textContent = '먼저 금액을 입력해 주세요.'; el.className = 'split-msg split-bad'; return; }
+  if (diff === 0)  { el.textContent = `✅ 합계 ${fmtMoney(sum)} — 결제 총액과 일치합니다.`; el.className = 'split-msg split-ok'; return; }
+  el.textContent = diff > 0
+    ? `결제 총액 ${fmtMoney(target)} 중 ${fmtMoney(diff)} 남았습니다.`
+    : `결제 총액 ${fmtMoney(target)}보다 ${fmtMoney(-diff)} 많습니다.`;
+  el.className = 'split-msg split-bad';
+}
+
+function onPayTypeChange() {
+  const isSplit = document.getElementById('txPayment').value === 'split';
+  document.getElementById('txPaySplitBox').style.display = isSplit ? '' : 'none';
+  if (isSplit) calcPaySplit();
+}
+function calcPaySplit() { _renderSplitMsg('txPaySplitMsg', 'txPayCard', 'txPayCash', svcPayTotal()); }
+
+function onRegPayTypeChange() {
+  const isSplit = document.getElementById('txRegPayment').value === 'split';
+  document.getElementById('txRegPaySplitBox').style.display = isSplit ? '' : 'none';
+  if (isSplit) calcRegPaySplit();
+}
+function calcRegPaySplit() { _renderSplitMsg('txRegPaySplitMsg', 'txRegPayCard', 'txRegPayCash', regPayTotal()); }
+
+// 거래 1건을 현금/카드로 쪼갠다. 분할결제면 입력 비율대로 나눈다.
+function txCashCard(tx) {
+  let cash = 0, card = 0;
+  const split = (amt, kind, cashRaw, cardRaw) => {
+    if (!amt) return;
+    if (kind === 'split') {
+      const c = Number(cashRaw||0), d = Number(cardRaw||0), tot = c + d;
+      if (tot > 0) { const cs = Math.round(amt * c / tot); cash += cs; card += amt - cs; }
+      else card += amt;                       // 분할인데 입력이 비면 카드로
+    } else if (kind === 'cash') cash += amt;
+    else card += amt;
+  };
+  split(Number(tx.actualAmount ?? tx.amount ?? 0), tx.paymentType, tx.payCash, tx.payCard);
+  split(Number(tx.membershipRegActualAmount || 0),
+        tx.membershipRegPayment || tx.paymentType,
+        tx.membershipRegPayCash, tx.membershipRegPayCard);
+  return { cash, card };
+}
+
+// 거래 목록 → {cash, card}
+function sumCashCard(txs) {
+  return txs.reduce((a,t)=>{ const s=txCashCard(t); return {cash:a.cash+s.cash, card:a.card+s.card}; }, {cash:0,card:0});
+}
+
 function calcTxRegActual() {
   const amount = Number((document.getElementById('txRegAmount').value||'').replace(/,/g,''))||0;
   const disc   = Number(document.getElementById('txRegDiscount').value||0);
   const el     = document.getElementById('txRegActualAmt');
+
+  // 할인율을 인센티브 비율로 착각하는 실수가 잦아 경고를 띄운다
+  const warn = document.getElementById('txRegDiscountWarn');
+  if (warn) {
+    warn.style.display = disc >= 50 ? '' : 'none';
+    if (disc >= 50) document.getElementById('txRegDiscountVal').textContent = disc;
+  }
+
   if (!el) return;
   if (amount <= 0) { el.textContent = '-'; el.style.color=''; return; }
 
@@ -2054,6 +2216,22 @@ function saveTx() {
   if (!name)              { alert('고객명을 입력해 주세요.'); return; }
   if (!amount && !regRaw) { alert('금액을 입력해 주세요.'); return; }
 
+  // 카드+현금 분할결제는 합계가 결제 총액과 일치해야 한다
+  if (document.getElementById('txPayment').value === 'split') {
+    const tgt = svcPayTotal(), sum = _rawVal('txPayCard') + _rawVal('txPayCash');
+    if (sum !== tgt) {
+      alert(`관리금액 분할결제 금액이 맞지 않습니다.\n\n결제 총액  ${fmtMoney(tgt)}\n카드+현금  ${fmtMoney(sum)}\n차액      ${fmtMoney(Math.abs(tgt-sum))}`);
+      return;
+    }
+  }
+  if (regRaw > 0 && document.getElementById('txRegPayment').value === 'split') {
+    const tgt = regPayTotal(), sum = _rawVal('txRegPayCard') + _rawVal('txRegPayCash');
+    if (sum !== tgt) {
+      alert(`회원권 분할결제 금액이 맞지 않습니다.\n\n결제 총액  ${fmtMoney(tgt)}\n카드+현금  ${fmtMoney(sum)}\n차액      ${fmtMoney(Math.abs(tgt-sum))}`);
+      return;
+    }
+  }
+
   const txId = id || uid();
   const txDate = document.getElementById('txDate').value;
 
@@ -2073,9 +2251,13 @@ function saveTx() {
     membershipRegDiscount: regDiscount,
     membershipRegTaxType: regTaxType,
     membershipRegPayment: document.getElementById('txRegPayment').value,
+    membershipRegPayCard: document.getElementById('txRegPayment').value === 'split' ? _rawVal('txRegPayCard') : 0,
+    membershipRegPayCash: document.getElementById('txRegPayment').value === 'split' ? _rawVal('txRegPayCash') : 0,
     membershipRegActualAmount,      // 실매출 (세금 전, 인센티브 기준)
     membershipRegTotalAmount,       // 고객결제 총액 (세금 포함)
     paymentType:   document.getElementById('txPayment').value,
+    payCard:       document.getElementById('txPayment').value === 'split' ? _rawVal('txPayCard') : 0,
+    payCash:       document.getElementById('txPayment').value === 'split' ? _rawVal('txPayCash') : 0,
     contractSigned: document.getElementById('txContract').checked,
     privacyAgreed:  document.getElementById('txPrivacy').checked,
     note:          document.getElementById('txNote').value.trim(),
@@ -2217,6 +2399,14 @@ function renderTeacherList() {
           <span>관리 ${inc.dailyRate}%</span><span>·</span>
           <span>회원권 ${inc.memberRate}%</span>
         </div>
+        <div style="background:#fbf7f4;border-radius:8px;padding:6px 8px;margin-bottom:6px;font-size:.78rem;">
+          <div class="d-flex justify-content-between"><span style="color:#636e72;">이번달 관리매출</span><span class="fw-bold">${fmtMoney(inc.dailyAmt)}</span></div>
+          <div class="d-flex justify-content-between"><span style="color:#636e72;">이번달 회원권매출</span><span class="fw-bold">${fmtMoney(inc.memberAmt)}</span></div>
+        </div>
+        ${(inc.dailyAmt && !inc.dailyRate) || (inc.memberAmt && !inc.memberRate)
+          ? `<div style="font-size:.72rem;color:#e17055;background:#fff5f2;border-radius:6px;padding:5px 8px;margin-bottom:6px;">
+               ⚠️ 매출은 있는데 인센티브 비율이 0% 입니다. 연필 아이콘에서 비율을 넣어주세요.
+             </div>` : ''}
         <hr class="my-1">
         <div class="d-flex justify-content-between mb-1">
           <span>관리 인센티브 <span style="font-size:.72rem;color:#636e72;">(${inc.dailyRate}%)</span></span>
@@ -2298,7 +2488,7 @@ function renderMonthlyStats(y,m){
   let growthHtml='';
   if(prevSales>0){const pct=((thisSales-prevSales)/prevSales*100).toFixed(1);const cls=pct>0?'growth-up':pct<0?'growth-down':'growth-flat';growthHtml=`<span class="${cls}" style="font-size:1.1rem;">${pct>0?'↑':'↓'} ${pct>0?'+':''}${pct}%</span><div style="font-size:.75rem;color:#636e72;">전월 대비</div>`;}
   else growthHtml=`<span class="growth-flat">-</span><div style="font-size:.75rem;color:#636e72;">전월 데이터 없음</div>`;
-  const cash=sumAmount(txs.filter(t=>t.paymentType==='cash')),card=sumAmount(txs.filter(t=>t.paymentType==='card'));
+  const {cash,card}=sumCashCard(txs);
   document.getElementById('monthlyStats').innerHTML=`
     <div class="col-6 col-md-3"><div class="card stat-card stat-total p-3"><div style="font-size:.75rem;opacity:.85;">📊 ${m}월 총 매출</div><div style="font-size:1.2rem;font-weight:800;">${fmtMoney(thisSales)}</div></div></div>
     <div class="col-6 col-md-3"><div class="card stat-card stat-cash p-3"><div style="font-size:.75rem;opacity:.85;">💵 현금</div><div style="font-size:1.2rem;font-weight:800;">${fmtMoney(cash)}</div></div></div>
@@ -2413,7 +2603,7 @@ function renderCharts(y,m){
   if(monthlyChart)monthlyChart.destroy();
   monthlyChart=new Chart(ctx1,{type:'bar',data:{labels,datasets:[{label:'매출',data,backgroundColor:'rgba(108,92,231,0.7)',borderRadius:8}]},options:{responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:v=>' '+fmtMoney(v.raw)}}},scales:{y:{ticks:{callback:v=>v>=10000?(v/10000)+'만':''+v,font:{size:10}}},x:{ticks:{font:{size:10}}}}}});
   const txs=txsForMonth(currentStoreId,y,m);
-  const cash=sumAmount(txs.filter(t=>t.paymentType==='cash')),card=sumAmount(txs.filter(t=>t.paymentType==='card'));
+  const {cash,card}=sumCashCard(txs);
   const ctx2=document.getElementById('paymentChart').getContext('2d');
   if(paymentChart)paymentChart.destroy();
   paymentChart=new Chart(ctx2,{type:'doughnut',data:{labels:['현금','카드'],datasets:[{data:[cash,card],backgroundColor:['#00b894','#0984e3'],borderWidth:2}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:11}}},tooltip:{callbacks:{label:v=>` ${fmtMoney(v.raw)}`}}}}});
@@ -2605,7 +2795,10 @@ function exportTeacherSalesExcel() {
 //  NOTIFICATION SYSTEM
 // ════════════════════════════════════════════════
 function buildTxMsg(tx, storeName, typeLabel) {
-  const payLabel  = tx.paymentType === 'cash' ? '현금' : '카드';
+  const payName   = k => k === 'split' ? '카드+현금' : k === 'cash' ? '현금' : '카드';
+  const payLabel  = tx.paymentType === 'split'
+    ? `카드+현금 (카드 ${fmtMoney(tx.payCard)} / 현금 ${fmtMoney(tx.payCash)})`
+    : payName(tx.paymentType);
   const svcActual = Number(tx.actualAmount ?? tx.amount ?? 0);
   const regActual = Number(tx.membershipRegActualAmount || 0);
   const regTotal  = Number(tx.membershipRegTotalAmount  || regActual);
@@ -2623,7 +2816,9 @@ function buildTxMsg(tx, storeName, typeLabel) {
   if (regActual > 0) {
     const discStr  = tx.membershipRegDiscount > 0 ? ` (할인 ${tx.membershipRegDiscount}%)` : '';
     const taxLabel = taxType === 'vat' ? '부가세' : taxType === 'cash' ? '현금영수증' : '';
-    const regPay   = tx.membershipRegPayment === 'cash' ? '현금' : '카드';
+    const regPay   = tx.membershipRegPayment === 'split'
+      ? `카드+현금 (카드 ${fmtMoney(tx.membershipRegPayCard)} / 현금 ${fmtMoney(tx.membershipRegPayCash)})`
+      : payName(tx.membershipRegPayment);
     lines.push(`🎫 회원권 실매출: ${fmtMoney(regActual)}${discStr} / ${regPay}`);
     if (hasTax) {
       lines.push(`   └ ${taxLabel} 포함 결제총액: ${fmtMoney(regTotal)}`);
