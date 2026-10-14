@@ -325,7 +325,7 @@ function seedDB(){
       {id:uid(),count:50,programId:'pg90', minutes:90, price:5250000,active:true},
       {id:uid(),count:50,programId:'pg120',minutes:120,price:7000000,active:true}
     ],
-    customers:[], memberships:[], records:[], adjustments:[], settlements:[], workLogs:[],
+    customers:[], memberships:[], records:[], adjustments:[], settlements:[], workLogs:[], pushSubs:[],
     settings:{ whtRate:0.033,      // 프리랜서 원천징수
                insRate:0.094,      // 아르바이트·정규직 4대보험 공제
                defaultRate:0.4, countSwitch:'amount',     // countSwitch: fixed | amount
@@ -411,7 +411,7 @@ async function pullSupa(quiet){
         syncMsg('☁️ 동기화됨','#fff');
         if (currentUser){
           const fresh = unseenRecs().filter(r=>!beforeIds.has(r.id));
-          if (fresh.length) showPopup(fresh);
+          if (fresh.length){ showPopup(fresh); osNotify(fresh); }
           refreshBell();
           if (!isBusy()) renderAll();
         } else buildLoginUsers();
@@ -623,6 +623,7 @@ function tryLogin(){
     if(b.dataset.p==='set') b.style.display = isAdmin()?'':'none';
   });
   refreshBell();
+  initSW();
   startPolling();
   if(isAdmin()){
     const list = unseenRecs();
@@ -716,6 +717,73 @@ function notifRow(r, isNew){
       <div class="hint num">수수료 ${won(r.fee)}원</div>
     </div></div>`;
 }
+/* ═══ 푸시 알림 ═══════════════════════════════════
+   · 앱이 열려 있을 때  → 화면 팝업 + OS 알림
+   · 앱이 꺼져 있을 때  → 웹푸시(서비스워커). 아이폰은 홈 화면에 추가해야 동작
+   ═════════════════════════════════════════════════ */
+const VAPID_PUBLIC = 'BCjTE4e4Z4TJyOAlBBtglAgzVHIXIeaRcT9zgPxQIgXnikluJjOi7eo9OZf54ndkQSyzEOIm3ZYF7SkqjM6y6NI';
+let _swReg = null;
+
+function pushSupported(){
+  return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+}
+async function initSW(){
+  if(!('serviceWorker' in navigator)) return null;
+  try{ _swReg = await navigator.serviceWorker.register('/sw.js'); return _swReg; }
+  catch(e){ return null; }                      // file:// 로 열었을 때 등
+}
+function urlB64ToU8(s){
+  const pad='='.repeat((4 - s.length % 4) % 4);
+  const b=atob((s+pad).replace(/-/g,'+').replace(/_/g,'/'));
+  return Uint8Array.from([...b].map(c=>c.charCodeAt(0)));
+}
+function myPushSub(){
+  return (db.pushSubs||[]).find(x=>x.userId===currentUser?.id && x.ua===navigator.userAgent);
+}
+async function enablePush(){
+  if(!pushSupported()){ toast('이 브라우저는 푸시를 지원하지 않습니다','bad'); return; }
+  const perm = await Notification.requestPermission();
+  if(perm!=='granted'){ toast('알림이 차단되어 있습니다','bad'); renderSet(); return; }
+  const reg = _swReg || await initSW();
+  if(!reg){ toast('서비스워커 등록 실패 (https 주소로 접속하세요)','bad'); return; }
+  try{
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly:true,
+      applicationServerKey: urlB64ToU8(VAPID_PUBLIC) });
+    const j = sub.toJSON();
+    db.pushSubs = (db.pushSubs||[]).filter(x=>x.sub?.endpoint !== j.endpoint);
+    db.pushSubs.push({ id:uid(), userId:currentUser.id, ua:navigator.userAgent,
+                       sub:{endpoint:j.endpoint, keys:j.keys}, createdAt:new Date().toISOString() });
+    saveDB();
+    toast('푸시 알림이 켜졌습니다','ok');
+  }catch(e){ console.warn(e); toast('구독 실패 — 홈 화면에 추가 후 다시 시도하세요','bad'); }
+  renderSet();
+}
+async function disablePush(){
+  const reg = _swReg || await initSW();
+  try{ const sub = await reg?.pushManager.getSubscription(); if(sub) await sub.unsubscribe(); }catch(e){}
+  db.pushSubs = (db.pushSubs||[]).filter(x=>!(x.userId===currentUser.id && x.ua===navigator.userAgent));
+  saveDB(); toast('푸시 알림을 껐습니다','ok'); renderSet();
+}
+/* 선생님이 저장하면 관리자 기기로 발송 요청 */
+function firePush(){
+  try{
+    fetch('/api/push', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ from: currentUser?.id || '' }) }).catch(()=>{});
+  }catch(e){}
+}
+/* 앱이 열려 있을 때의 OS 알림 */
+function osNotify(list){
+  if(!('Notification' in window) || Notification.permission!=='granted' || !list.length) return;
+  const r = list[0];
+  const title = `${storeName(r.storeId)} ${userName(r.teacherId)} 선생님`;
+  const body  = `${custName(r.customerId)} · ${progText(r.serviceId)}\n인정매출 ${won(r.real)}원 / 수수료 ${won(r.fee)}원`
+              + (list.length>1 ? `\n외 ${list.length-1}건` : '');
+  try{
+    if(_swReg) _swReg.showNotification(title, { body, icon:'/icon-192.png', badge:'/icon-192.png', tag:'skt-record', renotify:true });
+    else new Notification(title, { body, icon:'/icon-192.png' });
+  }catch(e){}
+}
+
 /* 20초마다 서버를 확인해 새 입력을 가져온다 */
 let _poll=null;
 function startPolling(){
@@ -1278,6 +1346,7 @@ function saveRecord(){
   db.records.push(rec);
   if(m) applyMship(rec, +1);
   saveDB();
+  firePush();
   toast(`저장 완료 · 인정매출 ${wonW(c.real)} / 수수료 ${wonW(c.fee)}`,'ok');
   refreshBell();
   const keepStore=IN.storeId, keepDate=IN.date, keepTeacher=IN.teacherId;
@@ -2774,6 +2843,26 @@ function setEtcHTML(){
     </div>
   </div>
   <div class="card2">
+    <div class="sec-t"><i class="bi bi-phone-vibrate"></i>푸시 알림</div>
+    ${(()=>{
+      if(!pushSupported()) return '<div class="hint">이 브라우저에서는 푸시를 쓸 수 없습니다. 사파리·크롬 최신 버전에서 열어주세요.</div>';
+      const perm = Notification.permission;
+      const on = !!myPushSub() && perm==='granted';
+      return `<div class="kv"><span>이 기기 알림</span>
+        <b style="color:${on?'var(--ok)':'var(--mut)'}">${on?'켜짐':perm==='denied'?'차단됨':'꺼짐'}</b></div>
+      <div class="kv"><span>알림 받는 기기</span><b>${(db.pushSubs||[]).filter(x=>x.userId===currentUser.id).length}대</b></div>
+      <div class="d-flex gap-2 mt-2">
+        ${on? `<button class="btn btn-ghost btn-sm" onclick="disablePush()">이 기기 알림 끄기</button>`
+            : `<button class="btn btn-o btn-sm" onclick="enablePush()"><i class="bi bi-bell-fill"></i> 이 기기 알림 켜기</button>`}
+        ${on? `<button class="btn btn-ghost btn-sm ms-auto" onclick="testPush()">테스트 발송</button>`:''}
+      </div>
+      ${perm==='denied'?'<div class="hint mt-2" style="color:var(--bad)">브라우저 설정에서 이 사이트의 알림을 허용으로 바꿔주세요.</div>':''}
+      <div class="hint mt-2">선생님이 관리를 입력하면 관리자 기기로 알림이 갑니다.
+        <br><b>아이폰은 홈 화면에 추가한 뒤</b> 켜야 동작합니다 (공유 → 홈 화면에 추가).</div>`;
+    })()}
+  </div>
+
+  <div class="card2">
     <div class="sec-t"><i class="bi bi-bell"></i>소진 경고 기준</div>
     <div class="form-label" style="color:${LVL.red.c}">● 임박 (빨강)</div>
     <div class="gridin">
@@ -2821,6 +2910,14 @@ function setEtcHTML(){
     <div class="sec-t" style="color:var(--bad)"><i class="bi bi-exclamation-triangle-fill"></i>초기화</div>
     <button class="btn btn-ghost btn-sm w-100" style="color:var(--bad);border-color:#f3c9c9" onclick="resetAll()">전체 데이터 삭제</button>
   </div>`;
+}
+async function testPush(){
+  try{
+    const r = await fetch('/api/push', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ from:'' }) });
+    const j = await r.json();
+    toast(j.sent? `${j.sent}대로 발송했습니다` : (j.skipped || '발송 대상이 없습니다'), j.sent?'ok':'bad');
+  }catch(e){ toast('발송 실패 — 배포된 주소에서 시도하세요','bad'); }
 }
 function backupJSON(){
   const blob=new Blob([JSON.stringify(db,null,1)],{type:'application/json'});
