@@ -455,6 +455,26 @@ function progGroups(list){
   if(none.length) out.push({ cat:{id:'',name:'미분류',color:'#b9aca4'}, items:none });
   return out.filter(g=>g.items.length);
 }
+/* 그 관리에 실제로 쓰인 회원권 — 저장 시점 스냅샷 기준 */
+function usedMship(r){
+  const sn = r.snapshot || {};
+  if(r.payType==='prepaid'){
+    const paid = sn.paid ?? getMship(r.membershipId)?.paid, tot = sn.total ?? getMship(r.membershipId)?.total;
+    if(!paid||!tot) return { label:'정액권', disc:null };
+    return { label:`정액 ${won(paid/10000)}만원권`, disc:effDiscount(paid,tot) };
+  }
+  if(r.payType==='count'){
+    const cnt = sn.count ?? getMship(r.membershipId)?.count, pr = sn.price ?? getMship(r.membershipId)?.price;
+    const pid = sn.programId ?? getMship(r.membershipId)?.programId;
+    if(!cnt||!pr) return { label:'횟수권', disc:null };
+    const list = progPrice(pid) || r.listPrice;
+    return { label:`${getProg(pid)?progText(pid)+' ':''}${cnt}회권`, disc: list? countDisc(pr,cnt,list) : null };
+  }
+  return { label:'단건 결제', disc:0 };
+}
+const usedText = r => { const u=usedMship(r);
+  return u.label + (u.disc? ` · 할인 ${pct(u.disc,2)}` : (r.payType==='single'?'':'')); };
+
 const progDot = id => `<span class="cat-dot" style="display:inline-block;background:${catColor(getProg(id)?.catId)}"></span>`;
 
 /* 카테고리별로 묶어 색을 입힌 관리명 선택기 */
@@ -950,6 +970,12 @@ function renderInput(){
       ${progPicker(IN.serviceId,'setProgram')}
       <div class="hint mt-1">${progDot(IN.serviceId)} ${esc(catName(getProg(IN.serviceId)?.catId))} ·
         정상가 ${wonW(progPrice(IN.serviceId))}${progPrice(IN.serviceId)?'':' — 설정에서 가격을 먼저 입력하세요'}</div>
+      ${(()=>{ const m=getMship(IN.mshipId);
+        if(!m) return `<div class="hint mt-1" style="color:var(--bad)">↓ 아래 <b>결제 선택</b>에서 회원권을 고르면 할인율이 적용됩니다</div>`;
+        const d = m.type==='prepaid' ? effDiscount(m.paid,m.total) : countDisc(m.price,m.count,mshipList(m));
+        return `<div class="mt-1" style="font-size:.76rem;font-weight:700;color:var(--o)">
+          적용 중: ${esc(m.type==='prepaid'?`정액 ${won(m.paid/10000)}만원권`:`${progText(m.programId)} ${m.count}회권`)}
+          · 할인 ${pct(d,2)}</div>`; })()}
     </div>
 
     <div class="mt-2"><div class="form-label">결제 선택</div>
@@ -1272,7 +1298,7 @@ function recentListHTML(){
         <td class="num">${r.date.slice(5)}</td>
         <td>${esc(custName(r.customerId))}<div class="hint">${esc(storeName(r.storeId))}</div></td>
         <td><b>${esc(userName(r.teacherId))}</b><div class="hint">${empName(getUser(r.teacherId))}</div></td>
-        <td>${progDot(r.serviceId)} ${esc(progText(r.serviceId))}<div class="hint">${r.payType==='prepaid'?'정액권':r.payType==='count'?'횟수권':'단건'}${r.canceled?' · <span style="color:var(--bad)">취소됨</span>':''}</div></td>
+        <td>${progDot(r.serviceId)} ${esc(progText(r.serviceId))}<div class="hint">${esc(usedText(r))}${r.canceled?' · <span style="color:var(--bad)">취소됨</span>':''}</div></td>
         <td class="r num">${won(r.real)}</td>
         <td class="r num">${won(r.fee)}</td>
         <td class="r">${(isAdmin()&&!r.canceled)?`<button class="btn btn-ghost btn-xs" onclick="openRecord('${r.id}')">수정</button>`:''}</td>
@@ -1287,7 +1313,8 @@ function openRecord(id){
     <div class="kv"><span>고객</span><b>${esc(custName(r.customerId))}</b></div>
     <div class="kv"><span>지점 / 선생님</span><b>${esc(storeName(r.storeId))} · ${esc(userName(r.teacherId))}</b></div>
     <div class="kv"><span>관리</span><b>${esc(progText(r.serviceId))}</b></div>
-    <div class="kv"><span>결제 방식</span><b>${r.payType==='prepaid'?'정액권':r.payType==='count'?'횟수권':'단건 결제'}</b></div>
+    <div class="kv"><span>사용 회원권</span><b>${esc(usedMship(r).label)}</b></div>
+    ${usedMship(r).disc?`<div class="kv"><span>적용 할인율</span><b style="color:var(--o)">${pct(usedMship(r).disc,2)}</b></div>`:''}
     ${r.payType==='prepaid'?`<div class="kv"><span>차감 금액</span><b>${wonW(r.deduct)}</b></div>`:''}
     ${r.payType==='count'?`<div class="kv"><span>차감 횟수 / 추가결제</span><b>${r.units}회 / ${wonW(r.extra)}</b></div>`:''}
     <div class="kv"><span>관리 인정 매출</span><b style="color:var(--o)">${wonW(r.real)}</b></div>
@@ -1596,7 +1623,7 @@ function calDay(date){
     <table class="tbl">${rs.map(r=>`<tr>
       <td><b>${esc(custName(r.customerId))}</b><div class="hint">${esc(userName(r.teacherId))} · ${esc(storeName(r.storeId))}</div></td>
       <td>${progDot(r.serviceId)} ${esc(progText(r.serviceId))}
-        <div class="hint">${r.payType==='prepaid'?'정액권':r.payType==='count'?'횟수권':'단건'}</div></td>
+        <div class="hint">${esc(usedText(r))}</div></td>
       <td class="r num">${won(r.real)}원</td></tr>`).join('')}</table>`);
 }
 
@@ -1707,7 +1734,7 @@ function openCustDetail(id){
     <div class="form-label">관리 이력 (최근 30건)</div>
     ${rs.length?`<table class="tbl">${rs.map(r=>`<tr style="${r.canceled?'opacity:.45':''}">
         <td class="num">${r.date.slice(5)}</td><td>${progDot(r.serviceId)} ${esc(progText(r.serviceId))}${r.canceled?' <span class="badge-s badge-r">취소</span>':''}
-          <div class="hint">${esc(userName(r.teacherId))}</div></td>
+          <div class="hint">${esc(userName(r.teacherId))} · ${esc(usedText(r))}</div></td>
         <td class="r num">${won(r.real)}원</td></tr>`).join('')}</table>`:'<div class="hint">관리 이력이 없습니다.</div>'}
   `, `<button class="btn btn-ghost btn-sm" onclick="openCustEdit('${id}')">정보 수정</button>
       <button class="btn btn-o btn-sm" onclick="openSellMship('${id}')">회원권 등록</button>`);
@@ -2144,12 +2171,12 @@ function exportSettle(ym, sid){
   });
   lines.push('');
   lines.push('관리 상세');
-  lines.push(['날짜','지점','선생님','고객','관리명','결제방식','차감','관리 인정 매출','수수료'].join(','));
+  lines.push(['날짜','지점','선생님','고객','관리명','사용 회원권','적용 할인율','차감','관리 인정 매출','수수료'].join(','));
   filterRecs({ym, storeId:sid}).filter(r=>isAdmin()||r.teacherId===currentUser.id)
     .sort((a,b)=>a.date.localeCompare(b.date)).forEach(r=>{
       lines.push([ r.date, storeName(r.storeId), userName(r.teacherId), custName(r.customerId),
-        progText(r.serviceId),
-        r.payType==='prepaid'?'정액권':r.payType==='count'?'횟수권':'단건',
+        progText(r.serviceId), usedMship(r).label,
+        usedMship(r).disc!=null? pct(usedMship(r).disc,2) : '-',
         r.payType==='prepaid'?r.deduct+'원':r.payType==='count'?r.units+'회':'-',
         r.real, r.fee ].join(','));
     });
