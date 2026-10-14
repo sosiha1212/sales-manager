@@ -1764,8 +1764,10 @@ function saveCust(id){
 let SELL = null;
 function openSellMship(x){
   const c = db.customers.find(c=>c.id===x) || db.customers.find(c=>c.name===x);
+  // 관리 입력에서 열었으면 그 화면의 담당 선생님을 판매자 기본값으로
+  const defSeller = (page==='input' && IN && IN.teacherId) ? IN.teacherId : currentUser.id;
   SELL = { custId: c?c.id:'', _newName: c?'':(typeof x==='string'?x:''),
-           sellerId: currentUser.id, type:'prepaid', productId:'', paid:0, total:0,
+           sellerId: defSeller, type:'prepaid', productId:'', paid:0, total:0,
            count:10, programId: progs()[0]?.id, minutes: progMin(progs()[0]?.id), price:0, date: todayKST(),
            carry:false, balance:0, remain:0,
            storeId: (currentUser.storeIds||[])[0] || db.stores[0]?.id };
@@ -1784,11 +1786,13 @@ function drawSell(){
       <div><div class="form-label">지점</div><select class="form-select" onchange="SELL.storeId=this.value">
         ${db.stores.map(s=>`<option value="${s.id}" ${s.id===SELL.storeId?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
     </div>
-    <div class="form-label mt-2">판매한 선생님 <span class="hint">인센티브가 이 선생님에게 쌓입니다</span></div>
-    ${isAdmin()? `<select class="form-select" onchange="SELL.sellerId=this.value;sellPreview()">
+    <div class="form-label mt-2">판매한 선생님</div>
+    ${isAdmin()? `<select class="form-select" onchange="SELL.sellerId=this.value;drawSell()">
         ${db.users.filter(x=>x.active!==false).map(x=>`<option value="${x.id}" ${x.id===SELL.sellerId?'selected':''}>${esc(x.name)} · 인센티브 ${pct(x.mshipRate||0,0)}</option>`).join('')}
       </select>`
     : `<div class="hint"><b>${esc(currentUser.name)}</b> · 인센티브 ${pct(currentUser.mshipRate||0,0)}</div>`}
+    <div class="hint mt-1">회원권 판매 인센티브가 이 선생님에게 쌓입니다${
+      (page==='input' && IN && IN.teacherId===SELL.sellerId) ? ' · <b style="color:var(--o)">관리 입력의 담당 선생님</b>' : ''}</div>
     <div class="form-label mt-2">회원권 종류</div>
     <div class="pick">
       <button class="${SELL.type==='prepaid'?'on':''}" onclick="SELL.type='prepaid';SELL.productId='';drawSell()">정액권</button>
