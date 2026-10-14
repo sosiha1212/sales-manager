@@ -1659,8 +1659,10 @@ function renderCust(){
   <div class="d-flex gap-2 mb-2">
     <input class="form-control" placeholder="고객명 · 연락처 검색" value="${esc(CUST.q)}"
            oninput="CUST.q=this.value;clearTimeout(window._ct);window._ct=setTimeout(renderCust,250)">
-    <button class="btn btn-o" style="white-space:nowrap" onclick="openSellMship()"><i class="bi bi-ticket-perforated"></i> 회원권</button>
+    <button class="btn btn-o" style="white-space:nowrap" onclick="openSellMship()"><i class="bi bi-ticket-perforated"></i> 회원권 판매</button>
   </div>
+  <div class="hint mb-2">관리 없이 <b>회원권만 결제</b>한 경우에도 위 「회원권 판매」로 등록하면
+    결제 수입과 판매 인센티브에 바로 반영됩니다.</div>
   <div class="card2 tight d-flex gap-2">
     <div class="flex-fill"><div class="lbl">고객 수</div><div class="val sm num">${db.customers.length}명</div></div>
     <div class="flex-fill"><div class="lbl">정액권 잔액 합계</div><div class="val sm num">${won(cs.reduce((a,x)=>a+x.bal,0))}원</div></div>
