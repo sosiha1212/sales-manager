@@ -477,18 +477,23 @@ const usedText = r => { const u=usedMship(r);
   return u.label + (u.disc? ` · 할인 ${pct(u.disc,2)}` : (r.payType==='single'?'':'')); };
 
 const progDot = id => `<span class="cat-dot" style="display:inline-block;background:${catColor(getProg(id)?.catId)}"></span>`;
+/* 카테고리 색이 입혀진 관리명 */
+const progTag = id => `<span style="color:${catColor(getProg(id)?.catId)};font-weight:700">${esc(progText(id))}</span>`;
 
 /* 카테고리별로 묶어 색을 입힌 관리명 선택기 */
 function progBtn(pg, selId, fn, extra){
   const c=catColor(pg.catId), on=pg.id===selId;
-  return `<button style="box-shadow:inset 3px 0 0 ${c};${on?`background:${c}1A;border-color:${c};color:${c}`:''}"
-    onclick="${fn}('${pg.id}')">${esc(pg.name)}${pg.minutes?`<span class="mins">${pg.minutes}분</span>`:''}${extra?extra(pg):''}</button>`;
+  // 선택하지 않아도 카테고리 색이 보이게 — 피부는 피부색, 바디는 바디색
+  const st = on
+    ? `background:${c}26;border-color:${c};color:${c};font-weight:800;box-shadow:inset 4px 0 0 ${c}`
+    : `background:${c}0D;border-color:${c}40;color:${c};box-shadow:inset 3px 0 0 ${c}99`;
+  return `<button style="${st}" onclick="${fn}('${pg.id}')">${esc(pg.name)}${pg.minutes?`<span class="mins">${pg.minutes}분</span>`:''}${extra?extra(pg):''}</button>`;
 }
 function progPicker(selId, fn, list, extra){
   const gs = progGroups(list);
   if(!gs.length) return '<div class="hint">설정에서 관리를 먼저 등록하세요.</div>';
   const one = gs.length===1 && !gs[0].cat.id;
-  return gs.map(g=>`${one?'':`<div class="cat-head"><span class="cat-dot" style="background:${g.cat.color}"></span>${esc(g.cat.name)}
+  return gs.map(g=>`${one?'':`<div class="cat-head" style="color:${g.cat.color}"><span class="cat-dot" style="background:${g.cat.color}"></span>${esc(g.cat.name)}
       <span class="cat-bar" style="background:${g.cat.color}"></span></div>`}
     <div class="pick">${g.items.map(pg=>progBtn(pg,selId,fn,extra)).join('')}</div>`).join('');
 }
@@ -1368,7 +1373,7 @@ function recentListHTML(){
         <td class="num">${r.date.slice(5)}</td>
         <td>${esc(custName(r.customerId))}<div class="hint">${esc(storeName(r.storeId))}</div></td>
         <td><b>${esc(userName(r.teacherId))}</b><div class="hint">${empName(getUser(r.teacherId))}</div></td>
-        <td>${progDot(r.serviceId)} ${esc(progText(r.serviceId))}<div class="hint">${esc(usedText(r))}${r.canceled?' · <span style="color:var(--bad)">취소됨</span>':''}</div></td>
+        <td>${progDot(r.serviceId)} ${progTag(r.serviceId)}<div class="hint">${esc(usedText(r))}${r.canceled?' · <span style="color:var(--bad)">취소됨</span>':''}</div></td>
         <td class="r num">${won(r.real)}</td>
         <td class="r num">${won(r.fee)}</td>
         <td class="r">${(isAdmin()&&!r.canceled)?`<button class="btn btn-ghost btn-xs" onclick="openRecord('${r.id}')">수정</button>`:''}</td>
@@ -1382,7 +1387,7 @@ function openRecord(id){
   modal(`관리 내역 · ${r.date}`, `
     <div class="kv"><span>고객</span><b>${esc(custName(r.customerId))}</b></div>
     <div class="kv"><span>지점 / 선생님</span><b>${esc(storeName(r.storeId))} · ${esc(userName(r.teacherId))}</b></div>
-    <div class="kv"><span>관리</span><b>${esc(progText(r.serviceId))}</b></div>
+    <div class="kv"><span>관리</span><b>${progTag(r.serviceId)}</b></div>
     <div class="kv"><span>사용 회원권</span><b>${esc(usedMship(r).label)}</b></div>
     ${usedMship(r).disc?`<div class="kv"><span>적용 할인율</span><b style="color:var(--o)">${pct(usedMship(r).disc,2)}</b></div>`:''}
     ${r.payType==='prepaid'?`<div class="kv"><span>차감 금액</span><b>${wonW(r.deduct)}</b></div>`:''}
@@ -1561,7 +1566,7 @@ function teacherDashHTML(ym, sid, today, isCur){
       <tr><th>날짜</th><th>고객</th><th>관리</th><th class="r">인정매출</th><th class="r">수수료</th></tr>
       ${mRecs.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>`<tr>
         <td class="num">${r.date.slice(5)}</td><td>${esc(custName(r.customerId))}</td>
-        <td>${esc(progText(r.serviceId))}</td>
+        <td>${progDot(r.serviceId)} ${progTag(r.serviceId)}</td>
         <td class="r num">${won(r.real)}</td><td class="r num">${won(r.fee)}</td></tr>`).join('')}
     </table></div>`:'<div class="empty">내역이 없습니다.</div>'}
   </div>`;
@@ -1692,7 +1697,7 @@ function calDay(date){
     <hr class="soft">
     <table class="tbl">${rs.map(r=>`<tr>
       <td><b>${esc(custName(r.customerId))}</b><div class="hint">${esc(userName(r.teacherId))} · ${esc(storeName(r.storeId))}</div></td>
-      <td>${progDot(r.serviceId)} ${esc(progText(r.serviceId))}
+      <td>${progDot(r.serviceId)} ${progTag(r.serviceId)}
         <div class="hint">${esc(usedText(r))}</div></td>
       <td class="r num">${won(r.real)}원</td></tr>`).join('')}</table>`);
 }
@@ -1805,7 +1810,7 @@ function openCustDetail(id){
     <hr class="soft">
     <div class="form-label">관리 이력 (최근 30건)</div>
     ${rs.length?`<table class="tbl">${rs.map(r=>`<tr style="${r.canceled?'opacity:.45':''}">
-        <td class="num">${r.date.slice(5)}</td><td>${progDot(r.serviceId)} ${esc(progText(r.serviceId))}${r.canceled?' <span class="badge-s badge-r">취소</span>':''}
+        <td class="num">${r.date.slice(5)}</td><td>${progDot(r.serviceId)} ${progTag(r.serviceId)}${r.canceled?' <span class="badge-s badge-r">취소</span>':''}
           <div class="hint">${esc(userName(r.teacherId))} · ${esc(usedText(r))}</div></td>
         <td class="r num">${won(r.real)}원</td></tr>`).join('')}</table>`:'<div class="hint">관리 이력이 없습니다.</div>'}
   `, `<button class="btn btn-ghost btn-sm" onclick="openCustEdit('${id}')">정보 수정</button>
@@ -2320,9 +2325,10 @@ function calcBodyHTML(){
     <div class="mt-2">${progGroups().map(g=>`
       <div class="cat-head"><span class="cat-dot" style="background:${g.cat.color}"></span>${esc(g.cat.name)}
         <span class="cat-bar" style="background:${g.cat.color}"></span></div>
-      <div class="pick">${g.items.map(pg=>{ const on=CALC.deduct===pg.price&&pg.price;
-        return `<button style="box-shadow:inset 3px 0 0 ${g.cat.color};${on?`background:${g.cat.color}1A;border-color:${g.cat.color};color:${g.cat.color}`:''}"
-          onclick="CALC.deduct=${pg.price};refreshCalcBody()">${esc(pg.name)}<span class="mins">${pg.price?won(pg.price):'미설정'}</span></button>`;}).join('')}</div>`).join('')}</div>
+      <div class="pick">${g.items.map(pg=>{ const on=CALC.deduct===pg.price&&pg.price, c=g.cat.color;
+        const st = on ? `background:${c}26;border-color:${c};color:${c};font-weight:800;box-shadow:inset 4px 0 0 ${c}`
+                      : `background:${c}0D;border-color:${c}40;color:${c};box-shadow:inset 3px 0 0 ${c}99`;
+        return `<button style="${st}" onclick="CALC.deduct=${pg.price};refreshCalcBody()">${esc(pg.name)}<span class="mins">${pg.price?won(pg.price):'미설정'}</span></button>`;}).join('')}</div>`).join('')}</div>
     <div class="form-label mt-2 d-flex justify-content-between">프리랜서 수수료율 <b style="color:var(--ink)">${CALC.rate}%</b></div>
     <input type="range" class="form-range" min="0" max="100" step="1" value="${CALC.rate}" oninput="CALC.rate=num(this.value);refreshCalcBody()">
     <div id="calcRes">${calcResHTML(real,fee,store,`실질 할인 ${pct(effDiscount(CALC.paid,CALC.total),2)}`,'고객 결제액 기준 실매출')}</div>
@@ -2409,35 +2415,49 @@ function renderSet(){
 
 /* ── 가격 ─────────────────────────────────────── */
 function setPriceHTML(){
-  const gs = progGroups(db.programs.filter(p=>p.active!==false));
+  // 비어 있는 카테고리도 보여서 바로 추가할 수 있게 한다
+  const live = db.programs.filter(p=>p.active!==false);
+  const gs = cats().map(c=>({ cat:c, items:live.filter(p=>p.catId===c.id) }));
+  const none = live.filter(p=>!getCat(p.catId));
+  if(none.length) gs.push({ cat:{id:'',name:'미분류',color:'#b9aca4'}, items:none });
   return `
   <div class="card2">
     <div class="sec-t"><i class="bi bi-palette-fill"></i>관리 카테고리</div>
     <div class="hint mb-2">색과 순서를 정하면 관리 입력 화면에서 같은 순서·같은 색으로 묶여 보입니다.</div>
-    ${cats().map((c,i,arr)=>`<div class="card2 tight" style="margin-bottom:9px">
+    ${cats().map((c,i,arr)=>`<div class="card2 tight" style="margin-bottom:9px;box-shadow:inset 4px 0 0 ${c.color};background:${c.color}0A">
       <div class="d-flex align-items-center gap-2">
         <span class="cat-dot" style="width:14px;height:14px;background:${c.color}"></span>
-        <input class="form-control" value="${esc(c.name)}" onchange="cat_set('${c.id}','name',this.value)">
+        <input class="form-control" value="${esc(c.name)}" style="color:${c.color};font-weight:800" onchange="cat_set('${c.id}','name',this.value)">
         <button class="ordbtn" onclick="cat_move('${c.id}',-1)" ${i===0?'disabled':''}>▲</button>
         <button class="ordbtn" onclick="cat_move('${c.id}',1)" ${i===arr.length-1?'disabled':''}>▼</button>
         <button class="btn btn-ghost btn-xs" onclick="cat_del('${c.id}')"><i class="bi bi-trash"></i></button>
       </div>
       <div class="swrap mt-2">${CAT_COLORS.map(col=>`<div class="sw ${col===c.color?'on':''}" style="background:${col}" onclick="cat_set('${c.id}','color','${col}')"></div>`).join('')}</div>
+      <div class="hint mt-1">이 색이 <b>${esc(c.name)}</b> 의 모든 관리명에 그대로 적용됩니다
+        (${db.programs.filter(p=>p.catId===c.id && p.active!==false).length}개)</div>
     </div>`).join('')}
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 align-items-center">
+      <span class="cat-dot" style="width:14px;height:14px;background:${CAT_COLORS[db.categories.length%CAT_COLORS.length]}"></span>
       <input id="ncName" class="form-control" placeholder="카테고리 추가 (예: 피부, 바디, 기타)">
       <button class="btn btn-o btn-xs" onclick="cat_add()">추가</button>
     </div>
+    <div class="hint mt-1">추가하면 왼쪽 색이 자동 배정되고, 그 카테고리에 넣는 관리명은 모두 같은 색으로 표시됩니다.</div>
   </div>
 
   <div class="card2">
     <div class="sec-t"><i class="bi bi-tag-fill"></i>관리명별 정상가</div>
     ${gs.map(g=>`
-      <div class="cat-head"><span class="cat-dot" style="background:${g.cat.color}"></span>${esc(g.cat.name)}
-        <span class="cat-bar" style="background:${g.cat.color}"></span></div>
-      ${g.items.map((pg,i,arr)=>`<div class="card2 tight" style="margin-bottom:9px;box-shadow:inset 4px 0 0 ${g.cat.color}">
+      <div class="cat-head" style="color:${g.cat.color}">
+        <span class="cat-dot" style="background:${g.cat.color}"></span>${esc(g.cat.name)}
+        <span class="hint">${g.items.length}개</span>
+        <span class="cat-bar" style="background:${g.cat.color}"></span>
+        <button class="btn btn-ghost btn-xs" style="color:${g.cat.color};border-color:${g.cat.color}66"
+          onclick="pg_quickAdd('${g.cat.id}')"><i class="bi bi-plus"></i> 관리 추가</button></div>
+      ${g.items.length?'':`<div class="hint mb-2" style="padding:8px 10px;background:${g.cat.color}0A;border-radius:10px">
+        아직 등록된 관리가 없습니다. 위 <b>관리 추가</b>를 누르세요.</div>`}
+      ${g.items.map((pg,i,arr)=>`<div class="card2 tight" style="margin-bottom:9px;box-shadow:inset 4px 0 0 ${g.cat.color};background:${g.cat.color}08">
         <div class="d-flex align-items-center gap-2">
-          <input class="form-control" value="${esc(pg.name)}" onchange="pg_set('${pg.id}','name',this.value)">
+          <input class="form-control" value="${esc(pg.name)}" style="color:${g.cat.color};font-weight:700" onchange="pg_set('${pg.id}','name',this.value)">
           <button class="ordbtn" onclick="pg_move('${pg.id}',-1)" ${i===0?'disabled':''}>▲</button>
           <button class="ordbtn" onclick="pg_move('${pg.id}',1)" ${i===arr.length-1?'disabled':''}>▼</button>
           <button class="btn btn-ghost btn-xs" onclick="pg_del('${pg.id}')"><i class="bi bi-trash"></i></button>
@@ -2528,6 +2548,34 @@ function pg_move(id,dir){
   if(i<0||j<0||j>=arr.length) return;
   arr[i].order=j; arr[j].order=i;
   saveDB(); renderSet();
+}
+function pg_quickAdd(catId){
+  const c = getCat(catId);
+  modal(`${esc(c?c.name:'미분류')} 관리 추가`, `
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <span class="cat-dot" style="width:14px;height:14px;background:${c?c.color:'#b9aca4'}"></span>
+      <b style="color:${c?c.color:'#b9aca4'}">${esc(c?c.name:'미분류')}</b>
+      <span class="hint">이 카테고리 색으로 표시됩니다</span>
+    </div>
+    <div class="form-label">관리명</div>
+    <input id="qpName" class="form-control" placeholder="예) 엔더 60분, 된다리프팅 10만줄">
+    <div class="gridin mt-2">
+      <div><div class="form-label">관리 시간 (분)</div>
+        <input id="qpMin" type="number" class="form-control" placeholder="선택"></div>
+      <div><div class="form-label">정상가 (원)</div>
+        <input id="qpPrice" type="text" inputmode="numeric" class="form-control money" oninput="fmtMoney(this)" placeholder="예) 150,000"></div>
+    </div>
+    <div class="hint mt-2">관리명에 시간이 들어가 있으면 시간 칸은 비워두셔도 됩니다.</div>
+  `, `<button class="btn btn-o btn-sm" onclick="pg_quickSave('${catId}')">추가</button>`);
+}
+function pg_quickSave(catId){
+  const name = document.getElementById('qpName').value.trim();
+  if(!name){ toast('관리명을 입력하세요','bad'); return; }
+  db.programs.push({ id:uid(), name, catId,
+    minutes:R(num(document.getElementById('qpMin').value)),
+    price:R(num(document.getElementById('qpPrice').value)),
+    order:db.programs.filter(x=>x.catId===catId).length, active:true });
+  saveDB(); closeModal(); toast(`${name} 추가됨`,'ok'); renderSet();
 }
 function pg_add(){
   const name=document.getElementById('npName').value.trim();
