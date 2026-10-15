@@ -233,6 +233,7 @@ details.acc[open]>summary::after{content:"\F286"}
 
 const DB_KEY   = 'sktApp_v3';
 const ROW_ID   = 'skt_v3';
+const BAK_ID   = 'skt_v3_bak';          // 초기화 직전 스냅샷
 const SUPA_URL = 'https://orbjqhjkewuijroojlui.supabase.co';
 const SUPA_KEY = 'sb_publishable_9t6hMtCG1S_rvUDEmnh-sA_cdmHvYD0';
 const _supa = window.supabase?.createClient(SUPA_URL, SUPA_KEY);
@@ -2840,7 +2841,10 @@ function setEtcHTML(){
       <button class="btn btn-ghost btn-xs" onclick="document.getElementById('restoreFile').click()"><i class="bi bi-upload"></i> 백업 복원</button>
       <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="restoreJSON(this)">
       <button class="btn btn-ghost btn-xs" onclick="pullSupa()"><i class="bi bi-arrow-repeat"></i> 서버에서 새로고침</button>
+      <button class="btn btn-ghost btn-xs" onclick="restoreFromServer()"><i class="bi bi-clock-history"></i> 서버 백업에서 복원</button>
     </div>
+    <div class="hint mt-2">「백업 저장」으로 받은 JSON 파일은 「백업 복원」으로 언제든 되돌릴 수 있습니다.
+      서버 백업은 <b>초기화 직전 자동으로</b> 한 벌 저장됩니다.</div>
   </div>
   <div class="card2">
     <div class="sec-t"><i class="bi bi-phone-vibrate"></i>푸시 알림</div>
@@ -2908,6 +2912,8 @@ function setEtcHTML(){
 
   <div class="card2">
     <div class="sec-t" style="color:var(--bad)"><i class="bi bi-exclamation-triangle-fill"></i>초기화</div>
+    <div class="hint mb-2">계정·지점·관리명·고객·기록이 모두 지워지고 처음 상태(관리자 / 1234)로 돌아갑니다.
+      <b>관리자만</b> 할 수 있고, 진행 전에 <b>백업 파일이 자동 저장</b>되며 서버에도 복사본이 남습니다.</div>
     <button class="btn btn-ghost btn-sm w-100" style="color:var(--bad);border-color:#f3c9c9" onclick="resetAll()">전체 데이터 삭제</button>
   </div>`;
 }
@@ -2919,12 +2925,36 @@ async function testPush(){
     toast(j.sent? `${j.sent}대로 발송했습니다` : (j.skipped || '발송 대상이 없습니다'), j.sent?'ok':'bad');
   }catch(e){ toast('발송 실패 — 배포된 주소에서 시도하세요','bad'); }
 }
+/* 초기화 직전 서버에도 복사본을 남긴다 (파일 백업을 놓쳐도 되살릴 수 있게) */
+async function snapshotToServer(){
+  if(!_supa) return false;
+  try{
+    const { error } = await _supa.from('app_data')
+      .upsert({ id: BAK_ID, data: db, updated_at: new Date().toISOString() });
+    return !error;
+  }catch(e){ return false; }
+}
+async function restoreFromServer(){
+  if(!isAdmin()){ toast('관리자만 할 수 있습니다','bad'); return; }
+  if(!_supa){ toast('서버에 연결되어 있지 않습니다','bad'); return; }
+  const { data, error } = await _supa.from('app_data').select('data,updated_at').eq('id',BAK_ID);
+  if(error || !data || !data.length){ toast('서버에 백업이 없습니다','bad'); return; }
+  const b = data[0], d = b.data;
+  const when = new Date(b.updated_at).toLocaleString('ko-KR');
+  const info = `${when} 백업\n계정 ${(d.users||[]).length}개 · 관리명 ${(d.programs||[]).length}개 · 고객 ${(d.customers||[]).length}명 · 기록 ${(d.records||[]).length}건`;
+  if(!confirm(`이 백업으로 되돌립니다.\n\n${info}\n\n지금 데이터는 사라집니다. 진행할까요?`)) return;
+  backupJSON();                                  // 현재 상태도 파일로 받아둔다
+  db = normalize(d); saveDB();
+  toast('백업에서 복원했습니다','ok');
+  logout();
+}
 function backupJSON(){
   const blob=new Blob([JSON.stringify(db,null,1)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download=`skintalk_backup_${todayKST()}.json`; document.body.appendChild(a); a.click(); a.remove();
 }
 function restoreJSON(inp){
+  if(!isAdmin()){ toast('관리자만 할 수 있습니다','bad'); return; }
   const f=inp.files[0]; if(!f) return;
   const rd=new FileReader();
   rd.onload=e=>{ try{ const d=JSON.parse(e.target.result);
@@ -2933,10 +2963,21 @@ function restoreJSON(inp){
     }catch(err){ toast('파일을 읽을 수 없습니다','bad'); } };
   rd.readAsText(f);
 }
-function resetAll(){
-  if(!confirm('전체 데이터를 삭제합니다. 복구할 수 없습니다.')) return;
-  if(!confirm('정말 삭제할까요? 지점·계정도 초기 상태로 돌아갑니다.')) return;
-  db=seedDB(); saveDB(); toast('초기화되었습니다','ok'); logout();
+async function resetAll(){
+  if(!isAdmin()){ toast('관리자만 초기화할 수 있습니다','bad'); return; }
+  const n = `계정 ${db.users.length}개 · 관리명 ${db.programs.length}개 · 고객 ${db.customers.length}명 · 기록 ${db.records.length}건`;
+  if(!confirm(`전체 데이터를 삭제합니다.\n\n현재: ${n}\n\n진행하면 먼저 백업 파일이 자동으로 내려받아지고,\n서버에도 복사본이 저장됩니다.`)) return;
+
+  backupJSON();                                   // ① 파일로 자동 백업
+  const ok = await snapshotToServer();            // ② 서버에도 복사본
+  await new Promise(r=>setTimeout(r,600));
+
+  const w = prompt(`백업 완료${ok?' (파일 + 서버)':' (파일)'}\n\n되돌릴 수 없습니다. 계속하려면 삭제 라고 입력하세요.`);
+  if((w||'').trim() !== '삭제'){ toast('초기화를 취소했습니다'); return; }
+
+  db = seedDB(); saveDB();
+  toast('초기화되었습니다 · 관리자 / 1234','ok');
+  logout();
 }
 </script>
 <script>
