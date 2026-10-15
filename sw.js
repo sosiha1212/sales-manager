@@ -4,8 +4,36 @@ const SUPA_URL = 'https://orbjqhjkewuijroojlui.supabase.co';
 const SUPA_KEY = 'sb_publishable_9t6hMtCG1S_rvUDEmnh-sA_cdmHvYD0';
 const ROW_ID   = 'skt_v3';
 
-self.addEventListener('install', e => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+const CACHE = 'skt-v1';
+
+self.addEventListener('install', e => {
+  e.waitUntil((async () => {
+    try { const c = await caches.open(CACHE); await c.add('/'); } catch (_) {}
+    self.skipWaiting();
+  })());
+});
+self.addEventListener('activate', e => e.waitUntil((async () => {
+  for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
+  await self.clients.claim();
+})()));
+
+/* 화면 요청은 항상 서버 먼저 — 배포한 최신 버전이 바로 반영된다.
+   인터넷이 끊겼을 때만 저장해둔 화면을 보여준다(갤럭시 '앱 설치' 조건도 충족). */
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET' || req.mode !== 'navigate') return;
+  event.respondWith((async () => {
+    try {
+      const fresh = await fetch(req);
+      try { const c = await caches.open(CACHE); c.put('/', fresh.clone()); } catch (_) {}
+      return fresh;
+    } catch (e) {
+      return (await caches.match('/')) || new Response('오프라인입니다', {
+        status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+      });
+    }
+  })());
+});
 
 self.addEventListener('push', event => {
   event.waitUntil((async () => {
