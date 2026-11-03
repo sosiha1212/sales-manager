@@ -1550,11 +1550,30 @@ function mkChart(id, cfg){
   charts[id]?.destroy();
   charts[id] = new Chart(cv.getContext('2d'), cfg);
 }
-const CHART_BASE = { responsive:true, maintainAspectRatio:false,
-  plugins:{ legend:{ labels:{ boxWidth:10, font:{size:11} } },
-            tooltip:{ callbacks:{ label:c=>`${c.dataset.label||''} ${won(c.parsed.y ?? c.parsed)}원` } } },
-  scales:{ y:{ beginAtZero:true, ticks:{ font:{size:10}, callback:v=> v>=10000? (v/10000)+'만' : v } },
-           x:{ ticks:{ font:{size:10} }, grid:{display:false} } } };
+/* 눈금을 5 단위(5천·5만·50만…)로 끊는다 */
+function axisStep(max){
+  const steps = [1000,5000,10000,50000,100000,500000,1000000,5000000,10000000,50000000,100000000];
+  for(const st of steps) if(Math.ceil((max||0)/st) <= 6) return st;
+  return 500000000;
+}
+/* 눈금 단위가 1만 이상이면 '만' 표기로 통일, 아니면 원 단위로 통일 */
+const tickText = (v, st) => (st==null||st>=10000)
+  ? (v>=10000 ? (Math.round(v/1000)/10).toString().replace(/\.0$/,'')+'만' : won(v))
+  : won(v);
+/* 데이터 최대값에 맞춘 차트 설정 */
+function chartOpts(maxVal, extra){
+  const st  = axisStep(maxVal);
+  const top = Math.max(st, Math.ceil((maxVal||0)/st)*st);
+  return Object.assign({
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ labels:{ boxWidth:10, font:{size:11} } },
+              tooltip:{ callbacks:{ label:c=>`${c.dataset.label||''} ${won(c.parsed.y ?? c.parsed)}원` } } },
+    scales:{ y:{ beginAtZero:true, suggestedMax:top,
+                 ticks:{ font:{size:10}, stepSize:st, callback:v=>tickText(v,st) } },
+             x:{ ticks:{ font:{size:10} }, grid:{display:false} } }
+  }, extra||{});
+}
+const CHART_BASE = chartOpts(0);
 
 function renderDash(){
   DASH.ym = DASH.ym || thisYM();
@@ -1736,12 +1755,14 @@ function cumulate(a){ let s=0; return a.map(v=>s+=v); }
 
 function drawAdminCharts(ym, sid){
   const today=todayKST();
+  const dToday = db.stores.map(s=>sumReal(filterRecs({date:today,storeId:s.id})));
+  const dMonth = db.stores.map(s=>sumReal(filterRecs({ym,storeId:s.id})));
   mkChart('chStore', { type:'bar',
     data:{ labels: db.stores.map(s=>s.name),
       datasets:[
-        { label:'오늘', data: db.stores.map(s=>sumReal(filterRecs({date:today,storeId:s.id}))), backgroundColor:'#f0a97e', borderRadius:6 },
-        { label:'이번 달', data: db.stores.map(s=>sumReal(filterRecs({ym,storeId:s.id}))), backgroundColor:'#e56c2d', borderRadius:6 }
-      ]}, options: CHART_BASE });
+        { label:'오늘', data: dToday, backgroundColor:'#f0a97e', borderRadius:6 },
+        { label:'이번 달', data: dMonth, backgroundColor:'#e56c2d', borderRadius:6 }
+      ]}, options: chartOpts(Math.max(0,...dToday,...dMonth)) });
 
   const prev=prevYM(ym), n=daysInYM(ym);
   const cur=cumulate(dailySeries(ym,sid)), pre=cumulate(dailySeries(prev,sid));
@@ -1751,14 +1772,15 @@ function drawAdminCharts(ym, sid){
       datasets:[
         { label:ymText(prev), data:pre, borderColor:'#c9b8ae', backgroundColor:'transparent', borderWidth:2, pointRadius:0, borderDash:[5,4], tension:.25 },
         { label:ymText(ym), data:cur.map((v,i)=>i<cut?v:null), borderColor:'#e56c2d', backgroundColor:'rgba(229,108,45,.1)', borderWidth:2.5, pointRadius:0, fill:true, tension:.25 }
-      ]}, options: CHART_BASE });
+      ]}, options: chartOpts(Math.max(0,...cur,...pre)) });
 }
 function drawTeacherCharts(ym, sid){
   const n=daysInYM(ym);
+  const mine = dailySeries(ym,sid,currentUser.id);
   mkChart('chMine', { type:'bar',
     data:{ labels: Array.from({length:n},(_,i)=>i+1),
-      datasets:[{ label:'인정 매출', data: dailySeries(ym,sid,currentUser.id), backgroundColor:'#e56c2d', borderRadius:4 }]},
-    options: CHART_BASE });
+      datasets:[{ label:'인정 매출', data: mine, backgroundColor:'#e56c2d', borderRadius:4 }]},
+    options: chartOpts(Math.max(0,...mine)) });
 }
 </script>
 <script>
