@@ -2680,13 +2680,45 @@ function adminOnly(){
   toast('관리자만 변경할 수 있습니다','bad');
   return false;
 }
-/* 설정값 변경 (관리자 확인 포함) — db.settings.x = ... 대신 사용 */
+/* 정산 금액에 직접 영향을 주는 설정 — 바꿀 때 한 번 더 확인한다 */
+const RATE_FIELDS = {
+  defaultRate : { name:'기본 관리 수수료율', fmt:v=>pct(v,1), note:'새로 입력하는 관리부터 적용됩니다.' },
+  whtRate     : { name:'원천징수율',          fmt:v=>pct(v,1), note:'이번 달 정산부터 바로 반영됩니다.' },
+  insRate     : { name:'4대보험 공제율',      fmt:v=>pct(v,1), note:'이번 달 정산부터 바로 반영됩니다.' },
+  feeBasis    : { name:'할인 판매 시 수수료 기준',
+                  fmt:v=>v==='list'?'정가 기준 (수수료 고정)':'실제 결제액 기준 (수수료도 할인)',
+                  note:'앞으로 입력하는 관리부터 적용됩니다.' },
+  countSwitch : { name:'횟수권 관리 변경 규칙',
+                  fmt:v=>v==='fixed'?'1회 차감 + 차액 결제':'금액 비율 차감', note:'' },
+  'weekly.on'       : { name:'주휴수당 자동 계산', fmt:v=>v?'사용':'사용 안 함', note:'아르바이트 정산 금액이 달라집니다.' },
+  'weekly.minHours' : { name:'주휴수당 지급 기준', fmt:v=>`주 ${v}시간 이상`, note:'아르바이트 정산 금액이 달라집니다.' },
+  'weekly.fullHours': { name:'주 소정근로 시간',   fmt:v=>`${v}시간`,        note:'아르바이트 정산 금액이 달라집니다.' },
+  'weekly.payHours' : { name:'만근 시 지급 시간',  fmt:v=>`${v}시간`,        note:'아르바이트 정산 금액이 달라집니다.' },
+};
+function getSetting(path){
+  return path.split('.').reduce((o,k)=> (o==null?o:o[k]), db.settings);
+}
+/* 설정값 변경 (관리자 확인 + 요율은 한 번 더 확인) */
 function setSetting(path, val){
   if(!adminOnly()) return;
+  const f = RATE_FIELDS[path];
+  const cur = getSetting(path);
+  if(f){
+    if(String(cur)===String(val)) return;
+    const ok = confirm(
+      `${f.name}을(를) 바꿉니다.\n\n`
+      + `   현재 :  ${f.fmt(cur)}\n`
+      + `   변경 :  ${f.fmt(val)}\n\n`
+      + (f.note? f.note+'\n' : '')
+      + `이미 저장된 관리 기록의 금액은 바뀌지 않습니다.\n\n변경하시겠습니까?`);
+    if(!ok){ renderSet(); return; }
+  }
   const keys = path.split('.'); let o = db.settings;
   for(let i=0;i<keys.length-1;i++){ if(o[keys[i]]==null) o[keys[i]]={}; o=o[keys[i]]; }
   o[keys[keys.length-1]] = val;
-  saveDB(); renderSet();
+  saveDB();
+  if(f) toast(`${f.name} 변경됨`,'ok');
+  renderSet();
 }
 function cat_set(id,k,v){ if(!adminOnly()) return;
   const c=getCat(id); if(!c) return;
@@ -2914,7 +2946,16 @@ function cp_count(id,v){ if(!adminOnly()) return; const p=cp_find(id); const lis
   p.count=Math.max(1,R(num(v))); if(list) p.price=countPriceOf(list,p.count,d); saveDB(); renderSet(); }
 function cp_disc(id,v){ if(!adminOnly()) return; const p=cp_find(id); const list=progPrice(p.programId);
   if(!list){ toast('정상가를 먼저 입력하세요','bad'); return; }
-  p.price=countPriceOf(list,p.count,num(v)/100); saveDB(); renderSet(); }
+  const before = countDisc(p.price,p.count,list), after = num(v)/100;
+  if(Math.abs(before-after) < 1e-9) return;
+  const newPrice = countPriceOf(list,p.count,after);
+  const ok = confirm(`${progText(p.programId)} ${p.count}회권 할인율을 바꿉니다.\n\n`
+    + `   할인율 :  ${pct(before,2)}  →  ${pct(after,2)}\n`
+    + `   판매가 :  ${won(p.price)}원  →  ${won(newPrice)}원\n`
+    + `   1회 인정매출 :  ${won(countUnit(p.price,p.count))}원  →  ${won(countUnit(newPrice,p.count))}원\n\n`
+    + `앞으로 판매하는 회원권부터 적용됩니다.\n이미 판매된 회원권은 그대로 유지됩니다.\n\n변경하시겠습니까?`);
+  if(!ok){ renderSet(); return; }
+  p.price=newPrice; saveDB(); toast('할인율 변경됨','ok'); renderSet(); }
 function cp_price(id,v){ if(!adminOnly()) return; const p=cp_find(id); p.price=R(num(v)); saveDB(); renderSet(); }
 function cp_one(pgId, count, disc){
   const list=progPrice(pgId);
@@ -3075,7 +3116,23 @@ function saveUser(id){ if(!adminOnly()) return;
     deductRate: dr===''? null : num(dr)/100 };
   o.wht = o.deduct;
   if(id){
-    const u=getUser(id); Object.assign(u,o);
+    const u=getUser(id);
+    // 돈에 직접 영향을 주는 값이 바뀌면 한 번 더 확인
+    const diffs = [];
+    const add=(label,a,b,f)=>{ if(String(a)!==String(b)) diffs.push(`   ${label} :  ${f(a)}  →  ${f(b)}`); };
+    const P=v=>pct(v||0,1), W=v=>won(v||0)+'원';
+    add('관리 수수료율',      u.rate??db.settings.defaultRate, o.rate, P);
+    add('회원권 인센티브율',  u.mshipRate||0,  o.mshipRate, P);
+    add('시급',               u.hourly||0,     o.hourly,    W);
+    add('월 기본급',          u.baseSalary||0, o.baseSalary,W);
+    add('근무형태',           empName(u),      EMP[o.empType], v=>v);
+    add('세금 공제',          deductOn(u)?'적용':'미적용', o.deduct?'적용':'미적용', v=>v);
+    if(diffs.length){
+      const ok = confirm(`${u.name} 선생님의 정산 조건을 바꿉니다.\n\n${diffs.join('\n')}\n\n`
+        + `이번 달 정산부터 반영되며, 이미 저장된 관리 기록의 수수료는 바뀌지 않습니다.\n\n변경하시겠습니까?`);
+      if(!ok) return;
+    }
+    Object.assign(u,o);
     if(pin.length===4) u.pin=hashPin(pin);
     const off=document.getElementById('ufOff'); if(off) u.active=!off.checked;
   } else db.users.push({ id:uid(), ...o, pin:hashPin(pin), active:true });
