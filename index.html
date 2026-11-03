@@ -2601,26 +2601,40 @@ function setPriceHTML(){
 }
 
 /* ── 카테고리 ── */
-function cat_set(id,k,v){
+/* 가격·수수료율·회원권 조건은 관리자만 바꿀 수 있다 */
+function adminOnly(){
+  if(isAdmin()) return true;
+  toast('관리자만 변경할 수 있습니다','bad');
+  return false;
+}
+/* 설정값 변경 (관리자 확인 포함) — db.settings.x = ... 대신 사용 */
+function setSetting(path, val){
+  if(!adminOnly()) return;
+  const keys = path.split('.'); let o = db.settings;
+  for(let i=0;i<keys.length-1;i++){ if(o[keys[i]]==null) o[keys[i]]={}; o=o[keys[i]]; }
+  o[keys[keys.length-1]] = val;
+  saveDB(); renderSet();
+}
+function cat_set(id,k,v){ if(!adminOnly()) return;
   const c=getCat(id); if(!c) return;
   if(k==='name'){ if(!v.trim()) return; c.name=v.trim(); } else c[k]=v;
   saveDB(); renderSet();
 }
-function cat_add(){
+function cat_add(){ if(!adminOnly()) return;
   const n=document.getElementById('ncName').value.trim();
   if(!n){ toast('카테고리명을 입력하세요','bad'); return; }
   db.categories.push({ id:uid(), name:n, color:CAT_COLORS[db.categories.length%CAT_COLORS.length],
                        order:db.categories.length });
   saveDB(); toast('추가되었습니다','ok'); renderSet();
 }
-function cat_move(id,dir){
+function cat_move(id,dir){ if(!adminOnly()) return;
   const arr=cats(); arr.forEach((c,k)=>c.order=k);          // 순서 정규화
   const i=arr.findIndex(c=>c.id===id), j=i+dir;
   if(i<0||j<0||j>=arr.length) return;
   arr[i].order=j; arr[j].order=i;
   saveDB(); renderSet();
 }
-function cat_del(id){
+function cat_del(id){ if(!adminOnly()) return;
   const used=db.programs.filter(p=>p.catId===id && p.active!==false).length;
   if(used && !confirm(`이 카테고리의 관리 ${used}개가 '미분류'로 바뀝니다. 삭제할까요?`)) return;
   if(!used && !confirm('삭제할까요?')) return;
@@ -2630,14 +2644,14 @@ function cat_del(id){
 }
 
 /* ── 관리명 ── */
-function pg_set(id,k,v){
+function pg_set(id,k,v){ if(!adminOnly()) return;
   const pg=getProg(id); if(!pg) return;
   if(k==='name'){ if(!v.trim()) return; pg.name=v.trim(); }
   else if(k==='catId'){ pg.catId=v; pg.order=db.programs.filter(x=>x.catId===v).length; }
   else pg[k]=R(num(v));
   saveDB(); renderSet();
 }
-function pg_move(id,dir){
+function pg_move(id,dir){ if(!adminOnly()) return;
   const pg=getProg(id); if(!pg) return;
   const arr=progs().filter(x=>x.catId===pg.catId);
   arr.forEach((x,k)=>x.order=k);                            // 순서 정규화
@@ -2665,7 +2679,7 @@ function pg_quickAdd(catId){
     <div class="hint mt-2">관리명에 시간이 들어가 있으면 시간 칸은 비워두셔도 됩니다.</div>
   `, `<button class="btn btn-o btn-sm" onclick="pg_quickSave('${catId}')">추가</button>`);
 }
-function pg_quickSave(catId){
+function pg_quickSave(catId){ if(!adminOnly()) return;
   const name = document.getElementById('qpName').value.trim();
   if(!name){ toast('관리명을 입력하세요','bad'); return; }
   db.programs.push({ id:uid(), name, catId,
@@ -2674,7 +2688,7 @@ function pg_quickSave(catId){
     order:db.programs.filter(x=>x.catId===catId).length, active:true });
   saveDB(); closeModal(); toast(`${name} 추가됨`,'ok'); renderSet();
 }
-function pg_add(){
+function pg_add(){ if(!adminOnly()) return;
   const name=document.getElementById('npName').value.trim();
   if(!name){ toast('관리명을 입력하세요','bad'); return; }
   const cat=document.getElementById('npCat').value;
@@ -2684,14 +2698,14 @@ function pg_add(){
                      order:db.programs.filter(x=>x.catId===cat).length, active:true });
   saveDB(); toast('추가되었습니다','ok'); renderSet();
 }
-function pg_del(id){
+function pg_del(id){ if(!adminOnly()) return;
   if(db.programs.filter(p=>p.active!==false).length<=1){ toast('관리는 최소 1개 필요합니다','bad'); return; }
   if(!confirm('이 관리를 삭제할까요? 이미 저장된 기록과 회원권은 그대로 유지됩니다.')) return;
   const pg=getProg(id); if(pg) pg.active=false;
   saveDB(); renderSet();
 }
-function st_rename(id,v){ const st=db.stores.find(x=>x.id===id); if(st&&v.trim()){ st.name=v.trim(); saveDB(); } }
-function st_add(){ const v=document.getElementById('newStore').value.trim(); if(!v) return;
+function st_rename(id,v){ if(!adminOnly()) return; const st=db.stores.find(x=>x.id===id); if(st&&v.trim()){ st.name=v.trim(); saveDB(); } }
+function st_add(){ if(!adminOnly()) return; const v=document.getElementById('newStore').value.trim(); if(!v) return;
   db.stores.push({id:uid(),name:v}); saveDB(); renderSet(); }
 
 /* ── 적립 (정액권) ─────────────────────────────── */
@@ -2702,8 +2716,8 @@ function setBonusHTML(){
     <div class="sec-t"><i class="bi bi-percent"></i>할인 판매 시 관리 수수료 기준</div>
     <div class="hint mb-2">정가보다 싸게 파셨을 때, 선생님 관리 수수료를 무엇에 맞출지 정합니다.</div>
     <div class="pick">
-      <button class="${db.settings.feeBasis!=='list'?'on':''}" onclick="db.settings.feeBasis='paid';saveDB();renderSet()">실제 결제액 기준</button>
-      <button class="${db.settings.feeBasis==='list'?'on':''}" onclick="db.settings.feeBasis='list';saveDB();renderSet()">정가 기준</button>
+      <button class="${db.settings.feeBasis!=='list'?'on':''}" onclick="setSetting('feeBasis','paid')">실제 결제액 기준</button>
+      <button class="${db.settings.feeBasis==='list'?'on':''}" onclick="setSetting('feeBasis','list')">정가 기준</button>
     </div>
     ${(()=>{ const p=db.prepaidProducts.find(x=>x.active!==false); if(!p) return '';
       const d=R(p.paid*0.93), base=db.settings.feeBasis==='list'?p.paid:d, rate=db.settings.defaultRate||.4;
@@ -2748,9 +2762,9 @@ function setBonusHTML(){
     <button class="btn btn-ghost w-100 btn-sm" onclick="pp_add()"><i class="bi bi-plus"></i> 정액권 추가</button>
   </div>`;
 }
-function pp_set(id,k,v){ const p=db.prepaidProducts.find(x=>x.id===id); if(!p) return; p[k]=R(num(v)); saveDB(); renderSet(); }
-function pp_add(){ db.prepaidProducts.push({id:uid(),paid:1000000,total:1200000,active:true}); saveDB(); renderSet(); }
-function pp_del(id){ if(!confirm('삭제할까요? 이미 판매된 회원권은 그대로 유지됩니다.')) return;
+function pp_set(id,k,v){ if(!adminOnly()) return; const p=db.prepaidProducts.find(x=>x.id===id); if(!p) return; p[k]=R(num(v)); saveDB(); renderSet(); }
+function pp_add(){ if(!adminOnly()) return; db.prepaidProducts.push({id:uid(),paid:1000000,total:1200000,active:true}); saveDB(); renderSet(); }
+function pp_del(id){ if(!adminOnly()) return; if(!confirm('삭제할까요? 이미 판매된 회원권은 그대로 유지됩니다.')) return;
   db.prepaidProducts=db.prepaidProducts.filter(x=>x.id!==id); saveDB(); renderSet(); }
 
 /* ── 할인 (횟수권) ─────────────────────────────── */
@@ -2812,8 +2826,8 @@ function setDiscHTML(){
     <div class="sec-t"><i class="bi bi-arrow-left-right"></i>횟수권 관리 변경 규칙</div>
     <div class="hint mb-2">구매한 관리와 다른 관리를 받을 때의 차감 기준입니다.</div>
     <div class="pick">
-      <button class="${db.settings.countSwitch==='amount'?'on':''}" onclick="db.settings.countSwitch='amount';saveDB();renderSet()">금액 비율 차감</button>
-      <button class="${db.settings.countSwitch==='fixed'?'on':''}" onclick="db.settings.countSwitch='fixed';saveDB();renderSet()">1회 차감 + 차액 결제</button>
+      <button class="${db.settings.countSwitch==='amount'?'on':''}" onclick="setSetting('countSwitch','amount')">금액 비율 차감</button>
+      <button class="${db.settings.countSwitch==='fixed'?'on':''}" onclick="setSetting('countSwitch','fixed')">1회 차감 + 차액 결제</button>
     </div>
     <div class="hint mt-2">${db.settings.countSwitch==='fixed'
       ? '예) 10만원 관리 10회권으로 15만원 관리 → 1회 차감 + 정상가 차액 50,000원 추가 결제'
@@ -2823,12 +2837,12 @@ function setDiscHTML(){
 }
 function setDiscProg(id){ DISC_PROG=id; renderSet(); }
 function cp_find(id){ return db.countProducts.find(x=>x.id===id); }
-function cp_count(id,v){ const p=cp_find(id); const list=progPrice(p.programId); const d=countDisc(p.price,p.count,list);
+function cp_count(id,v){ if(!adminOnly()) return; const p=cp_find(id); const list=progPrice(p.programId); const d=countDisc(p.price,p.count,list);
   p.count=Math.max(1,R(num(v))); if(list) p.price=countPriceOf(list,p.count,d); saveDB(); renderSet(); }
-function cp_disc(id,v){ const p=cp_find(id); const list=progPrice(p.programId);
+function cp_disc(id,v){ if(!adminOnly()) return; const p=cp_find(id); const list=progPrice(p.programId);
   if(!list){ toast('정상가를 먼저 입력하세요','bad'); return; }
   p.price=countPriceOf(list,p.count,num(v)/100); saveDB(); renderSet(); }
-function cp_price(id,v){ const p=cp_find(id); p.price=R(num(v)); saveDB(); renderSet(); }
+function cp_price(id,v){ if(!adminOnly()) return; const p=cp_find(id); p.price=R(num(v)); saveDB(); renderSet(); }
 function cp_one(pgId, count, disc){
   const list=progPrice(pgId);
   if(!list) return false;                       // 정상가 없는 관리는 건너뜀
@@ -2837,11 +2851,11 @@ function cp_one(pgId, count, disc){
     price:countPriceOf(list,count,disc??0.2),active:true});
   return true;
 }
-function cp_oneSave(pgId,count){
+function cp_oneSave(pgId,count){ if(!adminOnly()) return;
   if(cp_one(pgId,count)){ saveDB(); toast('추가되었습니다','ok'); renderSet(); }
   else toast('정상가를 먼저 입력하세요','bad');
 }
-function cp_bulk(){
+function cp_bulk(){ if(!adminOnly()) return;
   const c=R(num(document.getElementById('bulkCnt').value));
   const d=num(document.getElementById('bulkDisc').value)/100;
   if(c<=0){ toast('횟수를 입력하세요','bad'); return; }
@@ -2851,10 +2865,10 @@ function cp_bulk(){
   toast(n? `${n}개 관리에 ${c}회권 추가${skip?` (정상가 없는 ${skip}개 제외)`:''}` : '추가할 항목이 없습니다', n?'ok':'bad');
   renderSet();
 }
-function cp_add(){ const list=progPrice(DISC_PROG);
+function cp_add(){ if(!adminOnly()) return; const list=progPrice(DISC_PROG);
   db.countProducts.push({id:uid(),count:10,programId:DISC_PROG,minutes:progMin(DISC_PROG),
                          price:countPriceOf(list,10,.2),active:true}); saveDB(); renderSet(); }
-function cp_del(id){ if(!confirm('삭제할까요? 이미 판매된 회원권은 유지됩니다.')) return;
+function cp_del(id){ if(!adminOnly()) return; if(!confirm('삭제할까요? 이미 판매된 회원권은 유지됩니다.')) return;
   db.countProducts=db.countProducts.filter(x=>x.id!==id); saveDB(); renderSet(); }
 </script>
 <script>
@@ -2885,18 +2899,18 @@ function setTeamHTML(){
     <div class="sec-t"><i class="bi bi-calendar-week"></i>주휴수당 (아르바이트)</div>
     <label class="d-flex align-items-center gap-2 mb-2" style="font-size:.88rem">
       <input type="checkbox" ${db.settings.weekly.on?'checked':''}
-             onchange="db.settings.weekly.on=this.checked;saveDB();renderSet()"> 주휴수당 자동 계산 사용</label>
+             onchange="setSetting('weekly.on', this.checked)"> 주휴수당 자동 계산 사용</label>
     <div class="gridin">
       <div><div class="form-label">지급 기준 (주 N시간 이상)</div>
         <input type="number" class="form-control" value="${db.settings.weekly.minHours}"
-               onchange="db.settings.weekly.minHours=num(this.value);saveDB();renderSet()"></div>
+               onchange="setSetting('weekly.minHours', num(this.value))"></div>
       <div><div class="form-label">주 소정근로 (시간)</div>
         <input type="number" class="form-control" value="${db.settings.weekly.fullHours}"
-               onchange="db.settings.weekly.fullHours=num(this.value);saveDB();renderSet()"></div>
+               onchange="setSetting('weekly.fullHours', num(this.value))"></div>
     </div>
     <div class="mt-2"><div class="form-label">만근 시 지급 시간</div>
       <input type="number" class="form-control" value="${db.settings.weekly.payHours}"
-             onchange="db.settings.weekly.payHours=num(this.value);saveDB();renderSet()"></div>
+             onchange="setSetting('weekly.payHours', num(this.value))"></div>
     <div class="formula mt-2">주휴수당 = (그 주 근무시간 ÷ ${db.settings.weekly.fullHours}시간) × ${db.settings.weekly.payHours}시간 × 시급<br>
       · 주 ${db.settings.weekly.minHours}시간 미만인 주는 지급하지 않습니다<br>
       · 월~일 기준으로 주를 나누고, <b>일요일이 속한 달</b>에 지급합니다<br>
@@ -2908,14 +2922,14 @@ function setTeamHTML(){
     <div class="gridin">
       <div><div class="form-label">원천징수율 (%) <span class="hint">프리랜서</span></div>
         <input type="number" step="0.1" class="form-control" value="${(db.settings.whtRate*100).toFixed(1)}"
-               onchange="db.settings.whtRate=num(this.value)/100;saveDB();renderSet()"></div>
+               onchange="setSetting('whtRate', num(this.value)/100)"></div>
       <div><div class="form-label">4대보험 공제율 (%) <span class="hint">아르바이트·정규직</span></div>
         <input type="number" step="0.1" class="form-control" value="${(db.settings.insRate*100).toFixed(1)}"
-               onchange="db.settings.insRate=num(this.value)/100;saveDB();renderSet()"></div>
+               onchange="setSetting('insRate', num(this.value)/100)"></div>
     </div>
     <div class="mt-2"><div class="form-label">기본 관리 수수료율 (%)</div>
       <input type="number" class="form-control" value="${Math.round(db.settings.defaultRate*100)}"
-             onchange="db.settings.defaultRate=num(this.value)/100;saveDB();renderSet()"></div>
+             onchange="setSetting('defaultRate', num(this.value)/100)"></div>
     <div class="hint mt-2">선생님별로 다른 공제율을 쓰려면 계정 수정에서 직접 지정할 수 있습니다.
       변경해도 이미 저장된 관리 기록의 수수료는 바뀌지 않습니다(저장 시점 요율 적용).</div>
   </div>`;
@@ -2970,7 +2984,7 @@ function toggleEmpFields(t){
   if(pt) pt.style.display = t==='parttime'?'':'none';
   if(ft) ft.style.display = t==='fulltime'?'':'none';
 }
-function saveUser(id){
+function saveUser(id){ if(!adminOnly()) return;
   const name=document.getElementById('ufName').value.trim();
   if(!name){ toast('이름을 입력하세요','bad'); return; }
   const pin=document.getElementById('ufPin').value.trim();
@@ -3039,19 +3053,19 @@ function setEtcHTML(){
     <div class="gridin">
       <div><div class="form-label">남은 횟수 (회 이하)</div>
         <input type="number" class="form-control" value="${db.settings.redCount}"
-               onchange="db.settings.redCount=R(num(this.value));saveDB();renderSet()"></div>
+               onchange="setSetting('redCount', R(num(this.value)))"></div>
       <div><div class="form-label">정액권 잔액 (원 이하)</div>
         <input type="text" inputmode="numeric" class="form-control money" value="${won(db.settings.redAmount)}"
-               oninput="fmtMoney(this)" onchange="db.settings.redAmount=R(num(this.value));saveDB();renderSet()"></div>
+               oninput="fmtMoney(this)" onchange="setSetting('redAmount', R(num(this.value)))"></div>
     </div>
     <div class="form-label mt-2" style="color:${LVL.warn.c}">● 주의 (주황)</div>
     <div class="gridin">
       <div><div class="form-label">남은 횟수 (회 이하)</div>
         <input type="number" class="form-control" value="${db.settings.lowCount}"
-               onchange="db.settings.lowCount=R(num(this.value));saveDB();renderSet()"></div>
+               onchange="setSetting('lowCount', R(num(this.value)))"></div>
       <div><div class="form-label">정액권 잔액 (원 이하)</div>
         <input type="text" inputmode="numeric" class="form-control money" value="${won(db.settings.lowAmount)}"
-               oninput="fmtMoney(this)" onchange="db.settings.lowAmount=R(num(this.value));saveDB();renderSet()"></div>
+               oninput="fmtMoney(this)" onchange="setSetting('lowAmount', R(num(this.value)))"></div>
     </div>
     <div class="hint mt-2">고객 목록·고객 상세·대시보드에 색으로 표시되고, 재구매 안내 목록에 올라갑니다.</div>
   </div>
