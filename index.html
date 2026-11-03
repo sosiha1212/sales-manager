@@ -332,7 +332,8 @@ function seedDB(){
                defaultRate:0.4, countSwitch:'amount',     // countSwitch: fixed | amount
                lowCount:3, lowAmount:300000,              // 주황 경고
                redCount:1, redAmount:100000,              // 빨강 경고
-               weekly:{ on:true, minHours:15, fullHours:40, payHours:8 } }  // 주휴수당
+               weekly:{ on:true, minHours:15, fullHours:40, payHours:8 },  // 주휴수당
+               feeBasis:'paid' }     // 할인 판매 시 관리 수수료 기준: paid(실제 결제액) | list(정가)
   };
 }
 
@@ -349,6 +350,7 @@ function normalize(d){
   }
   for (const k of Object.keys(base)) if (d[k]===undefined) d[k]=base[k];
   d.settings = Object.assign({}, base.settings, d.settings||{});
+  if(!d.settings.feeBasis) d.settings.feeBasis='paid';
   d.settings.weekly = Object.assign({on:true,minHours:15,fullHours:40,payHours:8}, d.settings.weekly||{});
   if(d.settings.redCount==null){                 // 2단계 경고 기준 도입
     d.settings.redCount=1; d.settings.redAmount=100000;
@@ -462,10 +464,12 @@ function usedMship(r){
   if(r.payType==='prepaid'){
     const paid = sn.paid ?? getMship(r.membershipId)?.paid, tot = sn.total ?? getMship(r.membershipId)?.total;
     if(!paid||!tot) return { label:'정액권', disc:null };
-    return { label:`정액 ${won(paid/10000)}만원권`, disc:effDiscount(paid,tot) };
+    const base = sn.feeBase ?? paid;
+    return { label:`정액 ${won(paid/10000)}만원권${base!==paid?' (정가기준)':''}`, disc:effDiscount(base,tot) };
   }
   if(r.payType==='count'){
-    const cnt = sn.count ?? getMship(r.membershipId)?.count, pr = sn.price ?? getMship(r.membershipId)?.price;
+    const cnt = sn.count ?? getMship(r.membershipId)?.count;
+    const pr  = sn.feeBase ?? sn.price ?? getMship(r.membershipId)?.price;
     const pid = sn.programId ?? getMship(r.membershipId)?.programId;
     if(!cnt||!pr) return { label:'횟수권', disc:null };
     const list = progPrice(pid) || r.listPrice;
@@ -851,7 +855,7 @@ function activeMships(custId){
 }
 function mshipLabel(m){
   if(m.type==='prepaid')
-    return `정액 ${won(m.paid/10000)}만원권 · 잔액 ${won(m.balance)}원 (실매출 ${pct(1-effDiscount(m.paid,m.total),2)} 적용)`;
+    return `정액 ${won(m.paid/10000)}만원권 · 잔액 ${won(m.balance)}원 (실매출 ${pct(1-effDiscount(mshipFeeBase(m),m.total),2)} 적용)`;
   return `${progText(m.programId)} ${m.count}회권 · ${m.remain}회 남음 (1회 ${won(countUnit(m.price,m.count))}원)`;
 }
 
@@ -860,14 +864,16 @@ function calcRecord({payType, mship, minutes, deduct, units, extra, cashAmount, 
   const out = { deduct:0, units:0, extra:0, real:0, fee:0, rate:rate||0, note:'' };
   if(payType==='prepaid'){
     if(!mship) return out;
+    const base = mshipFeeBase(mship);
     out.deduct = R(deduct);
-    out.real   = prepaidReal(out.deduct, mship.paid, mship.total);
-    out.note   = `정액권 실질할인 ${pct(effDiscount(mship.paid,mship.total),2)} 적용`;
+    out.real   = prepaidReal(out.deduct, base, mship.total);
+    out.note   = `정액권 실질할인 ${pct(effDiscount(base,mship.total),2)} 적용`
+               + (base!==mship.paid ? ` · 정가 ${won(base)}원 기준 (실결제 ${won(mship.paid)}원)` : '');
   } else if(payType==='count'){
     if(!mship) return out;
     out.units  = Math.max(0, R(units||1));
     out.extra  = Math.max(0, R(extra||0));
-    const unit = countUnit(mship.price, mship.count);
+    const unit = countUnit(countFeeBase(mship), mship.count);
     out.real   = unit*out.units + out.extra;
     out.deduct = out.units;
     out.note   = `1회 인정 ${won(unit)}원 × ${out.units}회` + (out.extra?` + 추가결제 ${won(out.extra)}원`:'');
@@ -895,6 +901,27 @@ function countSwitchDefault(mship, programId){
   const fair    = R(unitRev * need);
   return { units, extra: Math.max(0, R(fair - covered)) };
 }
+
+/* 관리 수수료를 계산할 때 쓸 기준 금액
+   · paid : 고객이 실제 낸 돈 기준 (할인하면 수수료도 줄어든다)
+   · list : 정가 기준 (할인은 매장이 부담하고 수수료는 그대로)            */
+function mshipFeeBase(m){
+  if(!m) return 0;
+  if(db.settings.feeBasis!=='list') return m.paid;
+  if(m.listPaid) return m.listPaid;
+  const p = db.prepaidProducts.find(x=>x.total===m.total && x.active!==false);
+  return p ? p.paid : m.paid;                      // 같은 적립액 상품의 정가
+}
+function countFeeBase(m){
+  if(!m) return 0;
+  if(db.settings.feeBasis!=='list') return m.price;
+  if(m.listSale) return m.listSale;
+  const p = db.countProducts.find(x=>x.programId===m.programId && x.count===m.count && x.active!==false);
+  return p ? p.price : m.price;
+}
+/* 할인 판매 여부 (정가와 실제 결제액이 다른가) */
+const mshipDiscounted = m => m && (m.type==='prepaid'
+  ? mshipFeeBase(m)!==m.paid : countFeeBase(m)!==m.price);
 
 /* 회원권 차감 / 복원 */
 function applyMship(rec, dir){      // dir=+1 차감, -1 복원
@@ -1206,12 +1233,14 @@ function payChooserHTML(){
   const list = (t==='prepaid'?pre:cnt).map(m=>{
     const on = IN.mshipId===m.id;
     if(m.type==='prepaid'){
-      const real = prepaidReal(need, m.paid, m.total);
+      const base = mshipFeeBase(m);
+      const real = prepaidReal(need, base, m.total);
       return payCard('m:'+m.id, on, `정액 ${won(m.paid/10000)}만원권`,
-        `잔액 ${won(m.balance)}원 · 실질할인 ${pct(effDiscount(m.paid,m.total),2)}`,
+        `잔액 ${won(m.balance)}원 · 실질할인 ${pct(effDiscount(base,m.total),2)}`
+        + (base!==m.paid?` <span style="color:var(--ok)">정가기준</span>`:''),
         m.balance<need ? '<span style="color:var(--bad)">잔액 부족</span>' : `이 관리 ${won(real)}원 인정`);
     }
-    const unit = countUnit(m.price, m.count);
+    const unit = countUnit(countFeeBase(m), m.count);
     return payCard('m:'+m.id, on, `${esc(progText(m.programId))} ${m.count}회권`,
       `${m.remain}회 남음 · 1회 ${won(unit)}원${m.programId===IN.serviceId?'':' · 다른 관리'}`,
       `이 관리 ${won(unit)}원 인정`);
@@ -1330,8 +1359,8 @@ function calcPanelHTML(){
   return `<div class="card2 tight" style="background:var(--o-soft);border-color:var(--o-line);margin:0">
     <div class="d-flex justify-content-between align-items-center">
       <div class="lbl" style="color:var(--o)">저장될 금액</div>
-      ${IN.payType==='prepaid'&&m?`<span class="badge-s">실질 할인 ${pct(effDiscount(m.paid,m.total),2)}</span>`:''}
-      ${IN.payType==='count'&&m?`<span class="badge-s">할인 ${pct(countDisc(m.price,m.count,mshipList(m)),2)}</span>`:''}
+      ${IN.payType==='prepaid'&&m?`<span class="badge-s">실질 할인 ${pct(effDiscount(mshipFeeBase(m),m.total),2)}</span>`:''}
+      ${IN.payType==='count'&&m?`<span class="badge-s">할인 ${pct(countDisc(countFeeBase(m),m.count,mshipList(m)),2)}</span>`:''}
     </div>
     <div class="calc-row"><span>사용 회원권</span><b>${m?esc(m.type==='prepaid'?`정액 ${won(m.paid/10000)}만원권`:`${progText(m.programId)} ${m.count}회권`):'단건 결제'}</b></div>
     <div class="calc-row"><span>관리 인정 매출</span><b style="font-size:1.1rem;color:var(--o)">${wonW(c.real)}</b></div>
@@ -1383,8 +1412,8 @@ function saveRecord(){
     minutes:IN.minutes, payType:IN.payType, membershipId:IN.mshipId||'',
     listPrice:curPrice(), deduct:c.deduct, units:c.units, extra:c.extra,
     real:c.real, rate:c.rate, fee:c.fee, memo:IN.memo,
-    snapshot: m ? (m.type==='prepaid' ? {type:'prepaid',paid:m.paid,total:m.total}
-                                      : {type:'count',count:m.count,price:m.price,programId:m.programId,minutes:m.minutes}) : {type:'single'},
+    snapshot: m ? (m.type==='prepaid' ? {type:'prepaid',paid:m.paid,total:m.total,feeBase:mshipFeeBase(m)}
+                                      : {type:'count',count:m.count,price:m.price,feeBase:countFeeBase(m),programId:m.programId,minutes:m.minutes}) : {type:'single'},
     createdAt:new Date().toISOString(), createdBy:currentUser.id, canceled:false, history:[]
   };
   db.records.push(rec);
@@ -1849,7 +1878,8 @@ function openCustDetail(id){
             <span class="badge-s">적립 +${pct(bonusRate(m.paid,m.total),2)}</span></div>
           <div class="kv"><span>사용 가능 총액</span><b class="num">${wonW(m.total)}</b></div>
           <div class="kv"><span>잔액</span><b class="num" style="color:${lv?LVL[lv].c:'var(--o)'}">${wonW(m.balance)}${lv?` · ${LVL[lv].t}`:''}</b></div>
-          <div class="kv"><span>실매출 환산율</span><b>${pct(m.paid/m.total,2)} <span class="hint">(실질할인 ${pct(effDiscount(m.paid,m.total),2)})</span></b></div>
+          <div class="kv"><span>실매출 환산율</span><b>${pct(mshipFeeBase(m)/m.total,2)} <span class="hint">(실질할인 ${pct(effDiscount(mshipFeeBase(m),m.total),2)})</span></b></div>
+          ${mshipDiscounted(m)?`<div class="kv"><span>수수료 기준</span><b style="color:var(--ok)">정가 ${wonW(mshipFeeBase(m))}</b></div>`:''}
         `:`
           <div class="d-flex justify-content-between"><b>횟수권 ${esc(progText(m.programId))} ${m.count}회</b>
             <span class="badge-s">할인 ${pct(countDisc(m.price,m.count,mshipList(m)),2)}</span></div>
@@ -1966,9 +1996,11 @@ function drawSell(){
     <div id="sellPv" class="mt-2">${sellPreviewHTML()}</div>`;
   modal('회원권 등록', body, `<button class="btn btn-o btn-sm" onclick="saveMship()">등록</button>`);
 }
-function pickPrepaid(id){ const p=db.prepaidProducts.find(x=>x.id===id); if(p){SELL.productId=id;SELL.paid=p.paid;SELL.total=p.total;} else SELL.productId=''; drawSell(); }
+function pickPrepaid(id){ const p=db.prepaidProducts.find(x=>x.id===id);
+  if(p){SELL.productId=id;SELL.paid=p.paid;SELL.total=p.total;SELL.listPaid=p.paid;} else SELL.productId='';
+  drawSell(); }
 function pickCount(id){ const p=db.countProducts.find(x=>x.id===id);
-  if(p){SELL.productId=id;SELL.count=p.count;SELL.programId=p.programId;SELL.minutes=progMin(p.programId)||p.minutes;SELL.price=p.price;}
+  if(p){SELL.productId=id;SELL.count=p.count;SELL.programId=p.programId;SELL.minutes=progMin(p.programId)||p.minutes;SELL.price=p.price;SELL.listSale=p.price;}
   else SELL.productId=''; drawSell(); }
 function sellPreview(){ document.getElementById('sellPv').innerHTML = sellPreviewHTML(); }
 function sellPreviewHTML(){
@@ -1977,6 +2009,14 @@ function sellPreviewHTML(){
     return `<div class="card2 tight" style="background:var(--o-soft);border-color:var(--o-line);margin:0">
       <div class="kv"><span>추가 적립률</span><b>+${pct(bonusRate(SELL.paid,SELL.total),2)}</b></div>
       <div class="kv"><span>실질 할인율</span><b>${pct(effDiscount(SELL.paid,SELL.total),2)}</b></div>
+      ${(()=>{ const std=db.prepaidProducts.find(x=>x.total===SELL.total && x.active!==false);
+        if(!std || std.paid===SELL.paid) return '';
+        const cut = std.paid - SELL.paid;
+        return `<div class="kv"><span>정가 대비</span><b style="color:${cut>0?'var(--bad)':'var(--ok)'}">${cut>0?'−':'+'}${won(Math.abs(cut))}원</b></div>
+        <div class="kv"><span>관리 수수료 기준</span><b>${db.settings.feeBasis==='list'
+          ? `정가 ${won(std.paid)}원 <span class="hint">(수수료 그대로)</span>`
+          : `실제 ${won(SELL.paid)}원 <span class="hint">(수수료도 함께 줄어듦)</span>`}</b></div>`;
+      })()}
       ${SELL.carry?`<div class="kv"><span>등록할 잔액</span><b style="color:var(--o)">${wonW(SELL.balance||SELL.total)}</b></div>`:sellIncHTML(SELL.paid)}
       <div class="hint mt-1">${SELL.carry?'이월 등록 — 결제 수입에 잡히지 않습니다':`결제 수입 ${wonW(SELL.paid)}로 집계 (관리 매출과 합산 안 함)`}</div></div>`;
   }
@@ -2012,7 +2052,9 @@ function saveMship(){
     if(SELL.paid<=0||SELL.total<=0){ toast('금액을 입력하세요','bad'); return; }
     const bal = SELL.carry ? R(SELL.balance||SELL.total) : R(SELL.total);
     if(bal<=0||bal>SELL.total){ toast('남은 잔액을 확인하세요','bad'); return; }
+    const stdP = db.prepaidProducts.find(x=>x.total===R(SELL.total) && x.active!==false);
     db.memberships.push({ ...base, type:'prepaid', paid:R(SELL.paid), total:R(SELL.total), balance:bal,
+                          listPaid: R(SELL.listPaid || (stdP?stdP.paid:SELL.paid)),
                           incentive:R(SELL.paid*sRate) });
   } else {
     if(SELL.price<=0||SELL.count<=0){ toast('횟수와 판매가를 입력하세요','bad'); return; }
@@ -2020,7 +2062,9 @@ function saveMship(){
     if(rem<=0||rem>SELL.count){ toast('남은 횟수를 확인하세요','bad'); return; }
     db.memberships.push({ ...base, type:'count', count:R(SELL.count), programId:SELL.programId,
                           minutes:progMin(SELL.programId), unitList:progPrice(SELL.programId),
-                          price:R(SELL.price), remain:rem, used:R(SELL.count)-rem, incentive:R(SELL.price*sRate) });
+                          price:R(SELL.price), remain:rem, used:R(SELL.count)-rem,
+                          listSale: R(SELL.listSale || (db.countProducts.find(x=>x.programId===SELL.programId && x.count===R(SELL.count) && x.active!==false)||{}).price || SELL.price),
+                          incentive:R(SELL.price*sRate) });
   }
   saveDB(); closeModal(); toast('회원권이 등록되었습니다','ok');
   if(page==='input' && IN){                       // 방금 등록한 회원권을 바로 적용
@@ -2654,6 +2698,28 @@ function st_add(){ const v=document.getElementById('newStore').value.trim(); if(
 function setBonusHTML(){
   const rate = db.settings.defaultRate||.4;
   return `
+  <div class="card2">
+    <div class="sec-t"><i class="bi bi-percent"></i>할인 판매 시 관리 수수료 기준</div>
+    <div class="hint mb-2">정가보다 싸게 파셨을 때, 선생님 관리 수수료를 무엇에 맞출지 정합니다.</div>
+    <div class="pick">
+      <button class="${db.settings.feeBasis!=='list'?'on':''}" onclick="db.settings.feeBasis='paid';saveDB();renderSet()">실제 결제액 기준</button>
+      <button class="${db.settings.feeBasis==='list'?'on':''}" onclick="db.settings.feeBasis='list';saveDB();renderSet()">정가 기준</button>
+    </div>
+    ${(()=>{ const p=db.prepaidProducts.find(x=>x.active!==false); if(!p) return '';
+      const d=R(p.paid*0.93), base=db.settings.feeBasis==='list'?p.paid:d, rate=db.settings.defaultRate||.4;
+      const real=prepaidReal(100000,base,p.total), fee=R(real*rate);
+      return `<div class="formula mt-2">예) ${won(p.total/10000)}만원 적립권을 정가 ${won(p.paid)}원 대신 <b>${won(d)}원</b>에 판매하고 10만원 관리를 했을 때
+        <div class="kv mt-1"><span>관리 인정 매출</span><b>${wonW(real)}</b></div>
+        <div class="kv"><span>선생님 수수료 ${pct(rate,0)}</span><b>${wonW(fee)}</b></div>
+        <div class="kv"><span>회원권 판매 인센티브 기준</span><b>${wonW(d)} (항상 실제 결제액)</b></div>
+        <div class="mt-1">${db.settings.feeBasis==='list'
+          ? '<b style="color:var(--ok)">정가 기준</b> — 깎아준 만큼은 매장이 부담하고, 선생님 수수료는 그대로입니다.'
+          : '<b style="color:var(--o)">실제 결제액 기준</b> — 깎아준 만큼 선생님 수수료도 함께 줄어듭니다.'}</div></div>`;
+    })()}
+    <div class="hint mt-2">어느 쪽이든 <b>회원권 판매 인센티브</b>와 <b>결제 수입</b>은 항상 실제 받은 금액으로 집계됩니다.
+      이미 저장된 관리 기록은 바뀌지 않습니다.</div>
+  </div>
+
   <div class="card2">
     <div class="sec-t"><i class="bi bi-piggy-bank-fill"></i>정액권 적립 설정</div>
     <div class="hint mb-2">결제액보다 많은 금액을 적립해 드리는 구조입니다.
