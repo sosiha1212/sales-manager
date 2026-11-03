@@ -478,6 +478,12 @@ const usedText = r => { const u=usedMship(r);
 
 const progDot = id => `<span class="cat-dot" style="display:inline-block;background:${catColor(getProg(id)?.catId)}"></span>`;
 /* 카테고리 색이 입혀진 관리명 */
+/* 기록에 남은 관리명 — 직접 입력 건은 저장된 이름을 쓴다 */
+const recProgText = r => r.serviceId ? progText(r.serviceId) : (r.customName || '직접 입력');
+const recProgTag  = r => r.serviceId ? progTag(r.serviceId)
+  : `<span style="color:#8a7b72;font-weight:700">${esc(r.customName||'직접 입력')}</span>`;
+const recProgDot  = r => r.serviceId ? progDot(r.serviceId)
+  : `<span class="cat-dot" style="display:inline-block;background:#b9aca4"></span>`;
 const progTag = id => `<span style="color:${catColor(getProg(id)?.catId)};font-weight:700">${esc(progText(id))}</span>`;
 
 /* 카테고리별로 묶어 색을 입힌 관리명 선택기 */
@@ -684,7 +690,7 @@ function showPopup(list){
       </div>
       <div class="fw-bold mt-1" style="font-size:.92rem">
         ${esc(storeName(r.storeId))} ${esc(userName(r.teacherId))} 선생님이
-        ${esc(progText(r.serviceId))} 내역을 등록했습니다</div>
+        ${esc(recProgText(r))} 내역을 등록했습니다</div>
       <div class="kv mt-1"><span>고객</span><b>${esc(custName(r.customerId))}</b></div>
       <div class="kv"><span>결제</span><b>${r.payType==='prepaid'?'정액권':r.payType==='count'?'횟수권':'단건 결제'}</b></div>
       <div class="kv"><span>관리 인정 매출</span><b class="num" style="color:var(--o)">${wonW(r.real)}</b></div>
@@ -715,7 +721,7 @@ function notifRow(r, isNew){
     ${isNew?'<span class="cat-dot" style="background:var(--o);flex:none"></span>':''}
     <div style="min-width:0">
       <b style="font-size:.84rem">${esc(custName(r.customerId))}</b>
-      <span class="hint"> ${esc(progText(r.serviceId))}${r.canceled?' · 취소됨':''}</span>
+      <span class="hint"> ${esc(recProgText(r))}${r.canceled?' · 취소됨':''}</span>
       <div class="hint">${r.date.slice(5)} · ${esc(storeName(r.storeId))} · ${esc(userName(r.teacherId))}</div>
     </div>
     <div class="ms-auto text-end" style="white-space:nowrap">
@@ -1000,15 +1006,19 @@ function settleOf(uid_, ym, storeId){
    2. 관리 입력
    ═══════════════════════════════════════════════════ */
 let IN = null;
+/* 직접 입력 중이면 그 값, 아니면 등록된 관리의 정상가 */
+const curPrice = () => IN.custom ? R(IN.customPrice) : progPrice(IN.serviceId);
+const curName  = () => IN.custom ? (IN.customName || '직접 입력') : progText(IN.serviceId);
 function initInput(){
   const myStores = currentUser.storeIds||[];
   IN = { date: todayKST(), storeId: myStores[0] || db.stores[0]?.id,
          custId:'', custName:'', serviceId: progs()[0]?.id, minutes: progMin(progs()[0]?.id),
+         custom:false, customName:'', customPrice:0,
          payType:'prepaid', mshipId:'', deduct:0, units:1, extra:0, cash:0,
          memo:'', teacherId: isAdmin() ? (teachers()[0]?.id||currentUser.id) : currentUser.id,
          touchedDeduct:false, saving:false };
-  IN.deduct = progPrice(IN.serviceId);
-  IN.cash   = progPrice(IN.serviceId);
+  IN.deduct = curPrice();
+  IN.cash   = curPrice();
 }
 function renderInput(){
   if(!IN) initInput();
@@ -1041,9 +1051,22 @@ function renderInput(){
     </div>
 
     <div class="mt-2"><div class="form-label">관리명</div>
-      ${progPicker(IN.serviceId,'setProgram')}
-      <div class="hint mt-1">${progDot(IN.serviceId)} ${esc(catName(getProg(IN.serviceId)?.catId))} ·
-        정상가 ${wonW(progPrice(IN.serviceId))}${progPrice(IN.serviceId)?'':' — 설정에서 가격을 먼저 입력하세요'}</div>
+      ${progPicker(IN.custom?'':IN.serviceId,'setProgram')}
+      <div class="pick mt-1">
+        <button style="${IN.custom?'background:#8a7b7222;border-color:#8a7b72;color:#8a7b72;font-weight:800':''}"
+          onclick="setCustomProgram()"><i class="bi bi-pencil"></i> 직접 입력</button>
+      </div>
+      ${IN.custom? `<div class="gridin mt-2">
+          <div><div class="form-label">관리명 직접 입력</div>
+            <input class="form-control" value="${esc(IN.customName)}" placeholder="예) 엔더몰로지 30분"
+                   oninput="IN.customName=this.value"></div>
+          <div><div class="form-label">관리 금액</div>
+            <input type="text" inputmode="numeric" class="form-control money" value="${won(IN.customPrice)}"
+                   oninput="fmtMoney(this);IN.customPrice=num(this.value);syncCustomPrice()"></div>
+        </div>
+        <div class="hint mt-1">목록에 없는 관리나 금액이 다를 때 쓰세요. 입력한 금액이 정상가로 적용됩니다.</div>`
+      : `<div class="hint mt-1">${progDot(IN.serviceId)} ${esc(catName(getProg(IN.serviceId)?.catId))} ·
+        정상가 ${wonW(progPrice(IN.serviceId))}${progPrice(IN.serviceId)?'':' — 설정에서 가격을 먼저 입력하세요'}</div>`}
       ${(()=>{ const m=getMship(IN.mshipId);
         if(!m) return `<div class="hint mt-1" style="color:var(--bad)">↓ 아래 <b>결제 선택</b>에서 회원권을 고르면 할인율이 적용됩니다</div>`;
         const d = m.type==='prepaid' ? effDiscount(m.paid,m.total) : countDisc(m.price,m.count,mshipList(m));
@@ -1130,7 +1153,19 @@ function pickCustomer(name){
   autoPick();
   renderInput();
 }
+function setCustomProgram(){
+  IN.custom = !IN.custom;
+  if(IN.custom){ if(!IN.customPrice) IN.customPrice = progPrice(IN.serviceId); IN.minutes = 0; }
+  else IN.minutes = progMin(IN.serviceId);
+  syncCustomPrice(); renderInput();
+}
+function syncCustomPrice(){
+  if(!IN.touchedDeduct) IN.deduct = curPrice();
+  IN.cash = curPrice();
+  refreshCalc();
+}
 function setProgram(id){
+  IN.custom=false;
   IN.serviceId=id; IN.minutes=progMin(id);
   if(!IN.touchedDeduct) IN.deduct = progPrice(id);
   IN.cash = progPrice(id);
@@ -1167,7 +1202,7 @@ function payChooserHTML(){
   if(!named)
     return seg + `<div class="hint">고객명을 먼저 입력하세요. 보유 회원권이 자동으로 표시됩니다.</div>`;
 
-  const need = progPrice(IN.serviceId);
+  const need = curPrice();
   const list = (t==='prepaid'?pre:cnt).map(m=>{
     const on = IN.mshipId===m.id;
     if(m.type==='prepaid'){
@@ -1212,21 +1247,21 @@ function payCard(key, on, title, sub, right){
 }
 function setPayType(t){
   IN.manualPay = true; IN.payType = t;
-  if(t==='single'){ IN.mshipId=''; IN.cash = IN.cash || progPrice(IN.serviceId); }
+  if(t==='single'){ IN.mshipId=''; IN.cash = IN.cash || curPrice(); }
   else {
     const ms = IN.custId ? activeMships(IN.custId).filter(m=>m.type===t) : [];
     IN.mshipId = ms.length ? (ms.find(m=>m.programId===IN.serviceId)||ms[0]).id : '';
-    if(IN.mshipId){ syncFromMship(); if(t==='prepaid' && !IN.touchedDeduct) IN.deduct = progPrice(IN.serviceId); }
+    if(IN.mshipId){ syncFromMship(); if(t==='prepaid' && !IN.touchedDeduct) IN.deduct = curPrice(); }
   }
   renderInput();
 }
 function choosePay(key){
   IN.manualPay = true;
-  if(key==='single'){ IN.payType='single'; IN.mshipId=''; IN.cash = IN.cash||progPrice(IN.serviceId); }
+  if(key==='single'){ IN.payType='single'; IN.mshipId=''; IN.cash = IN.cash||curPrice(); }
   else {
     const m = getMship(key.slice(2)); if(!m) return;
     IN.payType = m.type; IN.mshipId = m.id; syncFromMship();
-    if(m.type==='prepaid' && !IN.touchedDeduct) IN.deduct = progPrice(IN.serviceId);
+    if(m.type==='prepaid' && !IN.touchedDeduct) IN.deduct = curPrice();
   }
   renderInput();
 }
@@ -1243,7 +1278,7 @@ function autoPick(){
     if(IN.payType==='single' || (cur && IN.custId && activeMships(IN.custId).some(m=>m.id===cur.id))) return;
   }
   const ms = IN.custId ? activeMships(IN.custId) : [];
-  const need = progPrice(IN.serviceId);
+  const need = curPrice();
   const cnt  = ms.filter(m=>m.type==='count');
   const pick = cnt.find(m=>m.programId===IN.serviceId)
             || ms.find(m=>m.type==='prepaid' && m.balance>=need && need>0)
@@ -1265,7 +1300,7 @@ function payDetailHTML(){
   if(IN.payType==='prepaid'){
     return `<div class="mt-2"><div class="form-label">관리 차감 금액</div>
       <input type="text" inputmode="numeric" class="form-control money" value="${won(IN.deduct)}" oninput="fmtMoney(this);IN.deduct=num(this.value);IN.touchedDeduct=true;refreshCalc()">
-      <div class="hint mt-1">기본값은 ${esc(progText(IN.serviceId))} 정상가 ${wonW(progPrice(IN.serviceId))} · 차감 후 잔액 ${wonW(Math.max(0,m.balance-IN.deduct))}</div></div>`;
+      <div class="hint mt-1">기본값은 ${esc(curName())} 정상가 ${wonW(curPrice())} · 차감 후 잔액 ${wonW(Math.max(0,m.balance-IN.deduct))}</div></div>`;
   }
   const same = m.programId===IN.serviceId;
   const lock = (!same && !isAdmin()) ? 'readonly style="background:#f6f3f1"' : '';
@@ -1277,7 +1312,7 @@ function payDetailHTML(){
     </div>
     <div class="hint mt-1">${same
       ? `구매한 관리(${esc(progText(m.programId))})와 동일 — 1회 차감`
-      : `<span class="badge-s badge-b">관리 변경</span> 구매 ${esc(progText(m.programId))} → 이용 ${esc(progText(IN.serviceId))}. 설정 규칙(${db.settings.countSwitch==='fixed'?'1회 차감 + 차액 결제':'금액 비율 차감'})으로 자동 계산했습니다. ${isAdmin()?'관리자는 직접 수정할 수 있습니다.':'차감 기준 변경은 관리자에게 요청하세요.'}`}
+      : `<span class="badge-s badge-b">관리 변경</span> 구매 ${esc(progText(m.programId))} → 이용 ${esc(curName())}. 설정 규칙(${db.settings.countSwitch==='fixed'?'1회 차감 + 차액 결제':'금액 비율 차감'})으로 자동 계산했습니다. ${isAdmin()?'관리자는 직접 수정할 수 있습니다.':'차감 기준 변경은 관리자에게 요청하세요.'}`}
       · 차감 후 ${Math.max(0,m.remain-IN.units)}회 남음</div>`;
 }
 
@@ -1313,6 +1348,8 @@ function saveRecord(){
   const btn=document.getElementById('saveBtn');
   if(!IN.custName){ toast('고객을 입력하세요','bad'); return; }
   if(!IN.storeId){ toast('지점을 선택하세요','bad'); return; }
+  if(IN.custom && !IN.customName.trim()){ toast('관리명을 입력하세요','bad'); return; }
+  if(IN.custom && curPrice()<=0){ toast('관리 금액을 입력하세요','bad'); return; }
   const c = currentCalc();
   const m = getMship(IN.mshipId);
 
@@ -1335,15 +1372,16 @@ function saveRecord(){
   }
   // 중복 방지
   const dup = liveRecords().find(r=>r.date===IN.date && r.customerId===custId && r.teacherId===IN.teacherId
-      && r.serviceId===IN.serviceId && r.minutes===IN.minutes);
+      && r.serviceId===(IN.custom?'':IN.serviceId) && r.minutes===IN.minutes);
   if(dup && !confirm('같은 날 같은 고객·프로그램·시간의 기록이 이미 있습니다. 그래도 저장할까요?')) return;
 
   IN.saving=true; btn.disabled=true;
   const u = getUser(IN.teacherId) || currentUser;
   const rec = {
     id:uid(), date:IN.date, storeId:IN.storeId, teacherId:IN.teacherId, customerId:custId,
-    serviceId:IN.serviceId, minutes:IN.minutes, payType:IN.payType, membershipId:IN.mshipId||'',
-    listPrice:progPrice(IN.serviceId), deduct:c.deduct, units:c.units, extra:c.extra,
+    serviceId: IN.custom ? '' : IN.serviceId, customName: IN.custom ? (IN.customName||'직접 입력') : '',
+    minutes:IN.minutes, payType:IN.payType, membershipId:IN.mshipId||'',
+    listPrice:curPrice(), deduct:c.deduct, units:c.units, extra:c.extra,
     real:c.real, rate:c.rate, fee:c.fee, memo:IN.memo,
     snapshot: m ? (m.type==='prepaid' ? {type:'prepaid',paid:m.paid,total:m.total}
                                       : {type:'count',count:m.count,price:m.price,programId:m.programId,minutes:m.minutes}) : {type:'single'},
@@ -1373,7 +1411,7 @@ function recentListHTML(){
         <td class="num">${r.date.slice(5)}</td>
         <td>${esc(custName(r.customerId))}<div class="hint">${esc(storeName(r.storeId))}</div></td>
         <td><b>${esc(userName(r.teacherId))}</b><div class="hint">${empName(getUser(r.teacherId))}</div></td>
-        <td>${progDot(r.serviceId)} ${progTag(r.serviceId)}<div class="hint">${esc(usedText(r))}${r.canceled?' · <span style="color:var(--bad)">취소됨</span>':''}</div></td>
+        <td>${recProgDot(r)} ${recProgTag(r)}<div class="hint">${esc(usedText(r))}${r.canceled?' · <span style="color:var(--bad)">취소됨</span>':''}</div></td>
         <td class="r num">${won(r.real)}</td>
         <td class="r num">${won(r.fee)}</td>
         <td class="r">${(isAdmin()&&!r.canceled)?`<button class="btn btn-ghost btn-xs" onclick="openRecord('${r.id}')">수정</button>`:''}</td>
@@ -1387,7 +1425,7 @@ function openRecord(id){
   modal(`관리 내역 · ${r.date}`, `
     <div class="kv"><span>고객</span><b>${esc(custName(r.customerId))}</b></div>
     <div class="kv"><span>지점 / 선생님</span><b>${esc(storeName(r.storeId))} · ${esc(userName(r.teacherId))}</b></div>
-    <div class="kv"><span>관리</span><b>${progTag(r.serviceId)}</b></div>
+    <div class="kv"><span>관리</span><b>${recProgTag(r)}</b></div>
     <div class="kv"><span>사용 회원권</span><b>${esc(usedMship(r).label)}</b></div>
     ${usedMship(r).disc?`<div class="kv"><span>적용 할인율</span><b style="color:var(--o)">${pct(usedMship(r).disc,2)}</b></div>`:''}
     ${r.payType==='prepaid'?`<div class="kv"><span>차감 금액</span><b>${wonW(r.deduct)}</b></div>`:''}
@@ -1400,7 +1438,9 @@ function openRecord(id){
     <input type="text" inputmode="numeric" id="edReal" class="form-control money" value="${won(r.real)}" oninput="fmtMoney(this)">
     <div class="hint mt-1">회원권 차감액은 그대로 유지됩니다. 차감까지 되돌리려면 「관리 취소」를 사용하세요.</div>
     ${r.history?.length?`<hr class="soft"><div class="form-label">변경 이력</div>${r.history.map(h=>`<div class="hint">· ${esc(h)}</div>`).join('')}`:''}
-  `, `<button class="btn btn-ghost btn-sm" onclick="cancelRecord('${r.id}')">관리 취소</button>
+  `, `${isAdmin()?`<button class="btn btn-ghost btn-sm" style="color:var(--bad);border-color:#f3c9c9"
+          onclick="deleteRecord('${r.id}')"><i class="bi bi-trash"></i> 삭제</button>`:''}
+      ${isAdmin()?`<button class="btn btn-ghost btn-sm" onclick="cancelRecord('${r.id}')">관리 취소</button>`:''}
       <button class="btn btn-o btn-sm" onclick="saveRecordEdit('${r.id}')">저장</button>`);
 }
 function saveRecordEdit(id){
@@ -1411,6 +1451,19 @@ function saveRecordEdit(id){
   r.history.push(`${nowKSTText()} 인정매출 ${won(r.real)}→${won(v)} (${currentUser.name})`);
   r.real = R(v); r.fee = R(r.real * r.rate);
   saveDB(); closeModal(); toast('수정되었습니다','ok'); renderAll();
+}
+/* 잘못 입력한 기록을 아예 지운다 — 회원권 차감도 되돌린다 */
+function deleteRecord(id){
+  if(!isAdmin()){ toast('관리자만 삭제할 수 있습니다','bad'); return; }
+  const r = db.records.find(x=>x.id===id); if(!r) return;
+  const m = getMship(r.membershipId);
+  const back = (!r.canceled && m)
+    ? (r.payType==='prepaid' ? `회원권 잔액 ${wonW(r.deduct)}가 복구됩니다.` : `회원권 ${r.units}회가 복구됩니다.`)
+    : '';
+  if(!confirm(`이 기록을 완전히 삭제합니다.\n\n${custName(r.customerId)} · ${recProgText(r)} · 인정매출 ${wonW(r.real)}\n${back}\n\n기록이 남지 않습니다. 이력을 남기려면 「관리 취소」를 쓰세요.`)) return;
+  if(!r.canceled) applyMship(r, -1);                 // 차감 복원
+  db.records = db.records.filter(x=>x.id!==id);
+  saveDB(); closeModal(); toast('삭제되었습니다','ok'); renderAll();
 }
 function cancelRecord(id){
   const r = db.records.find(x=>x.id===id); if(!r || r.canceled) return;
@@ -1566,7 +1619,7 @@ function teacherDashHTML(ym, sid, today, isCur){
       <tr><th>날짜</th><th>고객</th><th>관리</th><th class="r">인정매출</th><th class="r">수수료</th></tr>
       ${mRecs.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>`<tr>
         <td class="num">${r.date.slice(5)}</td><td>${esc(custName(r.customerId))}</td>
-        <td>${progDot(r.serviceId)} ${progTag(r.serviceId)}</td>
+        <td>${recProgDot(r)} ${recProgTag(r)}</td>
         <td class="r num">${won(r.real)}</td><td class="r num">${won(r.fee)}</td></tr>`).join('')}
     </table></div>`:'<div class="empty">내역이 없습니다.</div>'}
   </div>`;
@@ -1697,7 +1750,7 @@ function calDay(date){
     <hr class="soft">
     <table class="tbl">${rs.map(r=>`<tr>
       <td><b>${esc(custName(r.customerId))}</b><div class="hint">${esc(userName(r.teacherId))} · ${esc(storeName(r.storeId))}</div></td>
-      <td>${progDot(r.serviceId)} ${progTag(r.serviceId)}
+      <td>${recProgDot(r)} ${recProgTag(r)}
         <div class="hint">${esc(usedText(r))}</div></td>
       <td class="r num">${won(r.real)}원</td></tr>`).join('')}</table>`);
 }
@@ -1810,7 +1863,7 @@ function openCustDetail(id){
     <hr class="soft">
     <div class="form-label">관리 이력 (최근 30건)</div>
     ${rs.length?`<table class="tbl">${rs.map(r=>`<tr style="${r.canceled?'opacity:.45':''}">
-        <td class="num">${r.date.slice(5)}</td><td>${progDot(r.serviceId)} ${progTag(r.serviceId)}${r.canceled?' <span class="badge-s badge-r">취소</span>':''}
+        <td class="num">${r.date.slice(5)}</td><td>${recProgDot(r)} ${recProgTag(r)}${r.canceled?' <span class="badge-s badge-r">취소</span>':''}
           <div class="hint">${esc(userName(r.teacherId))} · ${esc(usedText(r))}</div></td>
         <td class="r num">${won(r.real)}원</td></tr>`).join('')}</table>`:'<div class="hint">관리 이력이 없습니다.</div>'}
   `, `<button class="btn btn-ghost btn-sm" onclick="openCustEdit('${id}')">정보 수정</button>
@@ -1975,7 +2028,7 @@ function saveMship(){
     IN.manualPay = true;
     const m = getMship(newId);
     IN.payType = m.type; IN.mshipId = newId; syncFromMship();
-    if(m.type==='prepaid' && !IN.touchedDeduct) IN.deduct = progPrice(IN.serviceId);
+    if(m.type==='prepaid' && !IN.touchedDeduct) IN.deduct = curPrice();
   }
   renderAll();
 }
@@ -2256,7 +2309,7 @@ function exportSettle(ym, sid){
   filterRecs({ym, storeId:sid}).filter(r=>isAdmin()||r.teacherId===currentUser.id)
     .sort((a,b)=>a.date.localeCompare(b.date)).forEach(r=>{
       lines.push([ r.date, storeName(r.storeId), userName(r.teacherId), custName(r.customerId),
-        progText(r.serviceId), usedMship(r).label,
+        recProgText(r), usedMship(r).label,
         usedMship(r).disc!=null? pct(usedMship(r).disc,2) : '-',
         r.payType==='prepaid'?r.deduct+'원':r.payType==='count'?r.units+'회':'-',
         r.real, r.fee ].join(','));
